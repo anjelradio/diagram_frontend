@@ -1,0 +1,144 @@
+/*
+ * Configuraciones del sistema y alias
+ *
+ * Mapea las variables de Tailwind y los tokens oficiales de Shadcn UI (neutral theme).
+ * La única variable de theme.css que alimenta a Shadcn es --app-surface (mapeada a --popover).
+ */
+
+@theme inline {
+  /* Paleta personalizada de la aplicación disponible como utilidades de Tailwind */
+  --color-app-bg: var(--app-bg);
+  --color-surface: var(--app-surface);
+  --color-surface-foreground: var(--app-surface-foreground);
+  --color-app-primary: var(--app-primary);
+  --color-app-primary-foreground: var(--app-primary-foreground);
+  --color-app-secondary: var(--app-secondary);
+  --color-app-secondary-foreground: var(--app-secondary-foreground);
+  --color-app-tertiary: var(--app-tertiary);
+  --color-app-tertiary-foreground: var(--app-tertiary-foreground);
+  --color-app-neutral: var(--app-neutral);
+  --color-app-neutral-muted: var(--app-neutral-muted);
+
+  /* Mantenemos también los alias directos por conveniencia */
+  --color-tertiary: var(--app-tertiary);
+  --color-tertiary-foreground: var(--app-tertiary-foreground);
+  --color-neutral: var(--app-neutral);
+  --color-neutral-muted: var(--app-neutral-muted);
+  --color-success: var(--app-success);
+  --color-success-foreground: var(--app-status-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--app-status-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--app-neutral);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Colores de tipografía (rigen la aplicación según theme.css) */
+  --color-headline-foreground: var(--headline-foreground);
+  --color-body-foreground: var(--body-foreground);
+  --color-label-foreground: var(--label-foreground);
+
+  /* Colores semánticos estándar de Shadcn UI */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Roles tipográficos cargados con next/font en styles/fonts.ts */
+  --font-headline: var(--app-font-headline);
+  --font-sans: var(--app-font-body);
+  --font-label: var(--app-font-label);
+  --font-mono: var(--app-font-label);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  /* Tokens de tipografía: rige theme.css */
+  --headline-foreground: var(--app-headline-foreground);
+  --body-foreground: var(--app-body-foreground);
+  --label-foreground: var(--app-label-foreground);
+
+  /*
+   * ==========================================================================
+   * TOKENS OFICIALES DE SHADCN UI (Tema Neutral Estándar)
+   * ==========================================================================
+   * Los componentes de Shadcn tienen su propia paleta neutral aislada.
+   */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+
+  /* Card independiente de Shadcn */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+
+  /* 
+   * 👈 SURFACES: El ÚNICO token de Shadcn que se alimenta de theme.css
+   * Controla: Dialog, AlertDialog, Sheet, Popover y DropdownMenu.
+   */
+  --popover: var(--app-surface);
+  --popover-foreground: var(--app-surface-foreground);
+
+  /* Botones, acentos y bordes estándar de Shadcn (Neutral) */
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --radius: 0.625rem;
+
+  /* Valores base de chart y sidebar de Shadcn */
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}

@@ -1,0 +1,94 @@
+:root {
+  /*
+   * ==============================================================================
+   * 🎨 TEMA DE LA APLICACIÓN — PALETA DE TOKENS VISUALES
+   * ==============================================================================
+   * Los componentes estándar de Shadcn UI mantienen su paleta neutral por defecto.
+   * La única variable de este archivo que alimenta automáticamente a componentes
+   * flotantes de Shadcn es:
+   * --app-surface (controla el fondo de Modales, Sheets, Popovers y Dropdowns).
+   * 
+   * Si deseas aplicar colores de esta paleta a botones, tarjetas u otros elementos
+   * de Shadcn, puedes usar directamente las utilidades de Tailwind:
+   * bg-app-primary, text-app-primary, bg-app-secondary, bg-app-tertiary, etc.
+   */
+
+  /* 
+   * ── Superficie Elevada (Surfaces / Modales / Menús / Sheets) ───────────────
+   * 👈 Este es el ÚNICO token vinculado a las superficies flotantes de Shadcn:
+   * Aplica a: Dialog (modales), AlertDialog, Sheet (paneles laterales/bottom sheets),
+   * Popover y DropdownMenu.
+   */
+  --app-surface: oklch(1 0 0);
+  --app-surface-foreground: oklch(0.145 0 0);
+
+  /* 
+   * ── Fondo General de la Aplicación ────────────────────────────────────────
+   * Aplica al contenedor principal / fondo de la página (bg-app-bg).
+   */
+  --app-bg: oklch(1 0 0);
+
+  /* 
+   * ── Color Primario (Marca / Acción Principal) ──────────────────────────────
+   * Disponible mediante clases de Tailwind: bg-app-primary, text-app-primary, etc.
+   */
+  --app-primary: oklch(0.205 0 0);
+  --app-primary-foreground: oklch(0.985 0 0);
+
+  /* 
+   * ── Color Secundario y Atenuado ───────────────────────────────────────────
+   * Disponible mediante clases de Tailwind: bg-app-secondary, text-app-secondary, etc.
+   */
+  --app-secondary: oklch(0.95 0 0);
+  --app-secondary-foreground: var(--app-primary);
+
+  /* 
+   * ── Color Terciario (Bordes y Líneas Divisorias) ──────────────────────────
+   * Disponible mediante clases de Tailwind: bg-app-tertiary, border-app-tertiary, etc.
+   */
+  --app-tertiary: oklch(0.922 0 0);
+  --app-tertiary-foreground: oklch(0.205 0 0);
+
+  /* 
+   * ── Neutros Base y Contraste Fuerte ───────────────────────────────────────
+   * Tinta neutra base para contrastes firmes e iconos (bg-app-neutral, text-app-neutral).
+   */
+  --app-neutral: oklch(0.145 0 0);
+
+  /* 
+   * ── Texto Secundario y Atenuado (Muted) ───────────────────────────────────
+   * Subtítulos, textos de ayuda y pies de página (text-app-neutral-muted).
+   */
+  --app-neutral-muted: oklch(0.556 0 0);
+
+  /* 
+   * ── Tipografía: Colores de Fuentes (Rigen la tipografía de la app) ────────
+   */
+
+  /* 
+   * Encabezados y Títulos:
+   * Aplica a: Todos los títulos HTML (h1, h2, h3, h4, h5, h6).
+   */
+  --app-headline-foreground: oklch(0.145 0 0); 
+
+  /* 
+   * Texto de Cuerpo:
+   * Aplica a: Todo el texto general de lectura (body) y párrafos estándar (<p>).
+   */
+  --app-body-foreground: oklch(0.35 0 0); 
+
+  /* 
+   * Etiquetas de Formulario:
+   * Aplica a: Textos de etiquetas de campos (<label>, <Label>).
+   */
+  --app-label-foreground: oklch(0.45 0 0); 
+
+  /* 
+   * ── Estados del Sistema y Feedback ────────────────────────────────────────
+   */
+  --app-success: oklch(0.723 0.219 142.136);
+  --app-info: oklch(0.685 0.169 237.323);
+  --app-warning: oklch(0.795 0.184 86.047);
+  --app-destructive: oklch(0.577 0.245 27.325);
+  --app-status-foreground: oklch(0.985 0 0);
+}
