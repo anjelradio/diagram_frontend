@@ -1,21 +1,24 @@
-import { Hanken_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
+import { Montserrat_Alternates } from "next/font/google";
 
 /*
- * Roles tipográficos para toda la aplicación. app/theme.css los expone como
- * las utilidades Tailwind font-headline, font-sans y font-label.
+ * Roles tipográficos para toda la aplicación configurados con Montserrat Alternates.
+ * Los estilos globales los exponen como las utilidades font-headline, font-sans y font-label.
  */
-const headline = Hanken_Grotesk({
+const headline = Montserrat_Alternates({
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
   variable: "--app-font-headline",
 });
 
-const body = Inter({
+const body = Montserrat_Alternates({
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
   variable: "--app-font-body",
 });
 
-const label = JetBrains_Mono({
+const label = Montserrat_Alternates({
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
   variable: "--app-font-label",
 });
 

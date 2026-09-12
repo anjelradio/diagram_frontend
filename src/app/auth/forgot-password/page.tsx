@@ -1,24 +1,31 @@
-import HeaderText from "@/features/auth/presentation/components/elements/header-text";
-import { AuthLink } from "@/features/auth/presentation/components/elements/auth-link";
-import { FieldDescription } from "@/components/ui/field";
+import Link from "next/link";
 import { ForgotPasswordForm } from "@/features/auth/presentation/components/forms/forgot-password-form";
 
 export default function ForgotPasswordPage() {
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
-      <div className="flex flex-col items-center gap-2 text-center">
-        <HeaderText
-          title="¿Olvidaste tu contraseña?"
-          description="Escribe tu email y te enviaremos un enlace para restablecerla."
-        />
-        <FieldDescription>
+    <>
+      <div className="text-center mb-8">
+        <h1 className="text-[1.65rem] sm:text-[1.75rem] font-bold text-white tracking-tight">
+          Recuperar contraseña
+        </h1>
+        <p className="text-[13px] sm:text-sm text-slate-400 mt-2 font-normal leading-relaxed">
+          Ingresa tu correo electrónico y te enviaremos las instrucciones para restablecer tu cuenta
+        </p>
+      </div>
+
+      <ForgotPasswordForm />
+
+      <div className="text-center mt-6">
+        <p className="text-[13px] sm:text-sm text-slate-400 font-normal">
           ¿Recordaste tu contraseña?{" "}
-          <AuthLink href="/auth/login" label="Inicia sesión" />
-        </FieldDescription>
+          <Link
+            href="/auth/login"
+            className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors"
+          >
+            Iniciar sesión
+          </Link>
+        </p>
       </div>
-      <div className="w-full max-w-sm">
-        <ForgotPasswordForm />
-      </div>
-    </div>
+    </>
   );
 }

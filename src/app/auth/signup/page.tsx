@@ -1,33 +1,22 @@
-import {
-  FieldDescription,
-  FieldGroup,
-  FieldSeparator,
-} from "@/components/ui/field";
-import HeaderText from "@/features/auth/presentation/components/elements/header-text";
+import { Suspense } from "react";
 import { SignupForm } from "@/features/auth/presentation/components/forms/signup-form";
-import { AuthLink } from "@/features/auth/presentation/components/elements/auth-link";
-import SocialSignInButtons from "@/features/auth/presentation/components/elements/social-sign-in-buttons";
 
 export default function SignupPage() {
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
-      <div className="flex flex-col items-center gap-2 text-center">
-        <HeaderText
-          title="Crear cuenta"
-          description="Completa tus datos para registrarte."
-        />
-        <FieldDescription>
-          ¿Ya tienes cuenta?{" "}
-          <AuthLink href="/auth/login" label="Inicia sesion" />
-        </FieldDescription>
+    <>
+      <div className="text-center mb-8">
+        <h1 className="text-[1.65rem] sm:text-[1.75rem] font-bold text-white tracking-tight">
+          Crear cuenta
+        </h1>
+        <p className="text-[13px] sm:text-sm text-slate-400 mt-2 font-normal leading-relaxed">
+          Crea tu cuenta para comenzar en tu lienzo
+        </p>
       </div>
-      <div className="w-full max-w-sm">
-        <FieldGroup>
-          <SignupForm />
-          <FieldSeparator>O CONTINUA CON</FieldSeparator>
-          <SocialSignInButtons />
-        </FieldGroup>
-      </div>
-    </div>
+
+      <Suspense fallback={null}>
+        <SignupForm />
+      </Suspense>
+    </>
   );
 }
+

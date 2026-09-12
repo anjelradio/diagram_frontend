@@ -2,7 +2,6 @@
 
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
-import { FieldGroup } from "@/components/ui/field";
 import TextFormField from "@/features/shared/presentation/components/forms/text-form-field";
 import { authClient } from "@/lib/auth-client";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
@@ -50,19 +49,22 @@ export function ForgotPasswordForm({
   };
 
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <form ref={formRef} action={handleSubmit}>
-        <FieldGroup>
-          <TextFormField
-            id="email"
-            name="email"
-            label="Email"
-            placeholder="tu@correo.com"
-            type="email"
-            autoComplete="email"
-          />
-          <SubmitButton text="Enviar enlace" pendingText="Enviando..." />
-        </FieldGroup>
+    <div className={cn("w-full", className)} {...props}>
+      <form ref={formRef} action={handleSubmit} className="space-y-4.5">
+        <TextFormField
+          id="email"
+          name="email"
+          label="Correo electrónico"
+          placeholder="ejemplo@diagram.com"
+          type="email"
+          autoComplete="email"
+          required
+        />
+        <SubmitButton
+          text="Enviar instrucciones de recuperación"
+          pendingText="Enviando..."
+          className="w-full py-3 px-5 rounded-full bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white text-sm font-medium transition-all duration-200 shadow-lg shadow-indigo-600/25 mt-3 border border-indigo-400/30"
+        />
       </form>
     </div>
   );

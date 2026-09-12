@@ -3,41 +3,78 @@ import type { NextRequest } from "next/server";
 import { auth } from "./lib/auth";
 import { headers } from "next/headers";
 
-/** Nombre de la cookie de sesión de Better Auth (prefijo por defecto): "better-auth.session_token" */
-// This function can be marked `async` if using `await` inside
+/**
+ * Proxy / Middleware de acceso y sesión para Next.js.
+ * Centraliza las reglas de navegación:
+ * - Sin sesión: solo permite rutas /auth/*; cualquier otra redirige a /auth/login.
+ * - Con sesión: redirige /auth/*, /home y rutas no admitidas a /projects; protege /projects y /projects/*.
+ */
 export async function proxy(request: NextRequest) {
-  // const { pathname } = request.nextUrl;
-  // Obtenemos la sesion de Better Auth
+  const { pathname, search } = request.nextUrl;
+
   const session = await auth.api.getSession({
     headers: await headers(),
   });
 
   const isAuthenticated = !!session;
+  const isAuthRoute = pathname.startsWith("/auth");
+  const isProjectsRoute =
+    pathname === "/projects" || pathname.startsWith("/projects/");
+  const isJoinRoute = pathname.startsWith("/join");
 
-  // Tomamos el rol de la sesion del usuario: const userRole = session?.user.role;
-
-  // 1. Proteger rutas privadas (Si no esta autenticado ira al login)
-  if (!isAuthenticated)
-    return NextResponse.redirect(new URL("/auth/login", request.url));
-
-  // 2. Proteccion por Rol
-  if (isAuthenticated) {
-    // ! implementar
+  // 1. Usuario no autenticado
+  if (!isAuthenticated) {
+    if (isAuthRoute) {
+      return NextResponse.next();
+    }
+    const redirectUrl = new URL("/auth/login", request.url);
+    const targetUrl = pathname + search;
+    if (targetUrl && targetUrl !== "/") {
+      redirectUrl.searchParams.set("callbackUrl", targetUrl);
+    }
+    return NextResponse.redirect(redirectUrl);
   }
 
-  // 3. Redireccionamiento por Rol
-  if (isAuthenticated) {
-    // ! implementar
+  // 2. Usuario autenticado
+  // Permitir acceso a la pantalla de unión de invitaciones
+  if (isJoinRoute) {
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  // Redirigir intentos de acceso a /auth/* o al callback temporal /home
+  if (isAuthRoute || pathname === "/home" || pathname.startsWith("/home/")) {
+    const callback =
+      request.nextUrl.searchParams.get("callbackUrl") ||
+      request.nextUrl.searchParams.get("callbackURL");
+
+    if (callback && callback.startsWith("/")) {
+      return NextResponse.redirect(new URL(callback, request.url));
+    }
+    return NextResponse.redirect(new URL("/projects", request.url));
+  }
+
+  // Permitir navegación legítima en el módulo de projects
+  if (isProjectsRoute) {
+    return NextResponse.next();
+  }
+
+  // Cualquier otra ruta web no admitida con sesión redirige a /projects
+  return NextResponse.redirect(new URL("/projects", request.url));
 }
 
-// Alternatively, you can use a default export:
-// export default function proxy(request: NextRequest) { ... }
+export default proxy;
+
 
 export const config = {
-  // El matcher define en que rutas se ejecuta el proxy
-  // ! Modificar segun necesidad
-  matcher: ["/home/:path*"],
+  matcher: [
+    /*
+     * Match all request paths except for:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico, sitemap.xml, robots.txt
+     * - images (public static files like /images/not_thumbnail.webp)
+     */
+    "/((?!api|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|images).*)",
+  ],
 };

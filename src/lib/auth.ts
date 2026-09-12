@@ -1,11 +1,10 @@
 import { betterAuth } from "better-auth";
-import { admin, jwt } from "better-auth/plugins";
+import { jwt } from "better-auth/plugins";
 import { Pool } from "pg";
 import {
   sendVerificationEmail,
   sendPasswordResetEmail,
 } from "@/lib/email";
-import { ac, DEFAULT_ROLE, ADMIN_ROLES, roles } from "@/lib/auth-roles";
 
 /**
  * Pool de conexión a PostgreSQL reutilizado por auth.
@@ -17,35 +16,7 @@ const pool = new Pool({
 
 export const auth = betterAuth({
   plugins: [
-    /**
-     * Admin Plugin — agrega el campo `role` (y campos de ban) a la tabla `user`.
-     *
-     * ── Configuración de roles ────────────────────────────────────────────────
-     * Los roles, permisos y defaults se gestionan en lib/auth-roles.ts.
-     * Ese es el único archivo que debes editar para adaptar el scaffold.
-     *
-     * ── Campos que agrega a la tabla `user` ──────────────────────────────────
-     *   - role          TEXT        → rol del usuario (default: DEFAULT_ROLE)
-     *   - banned        BOOLEAN     → si el usuario está baneado
-     *   - banReason     TEXT        → motivo del ban (opcional)
-     *   - banExpires    TIMESTAMP   → expiración del ban (null = permanente)
-     *
-     * ── APIs administrativas expuestas ───────────────────────────────────────
-     * POST /api/auth/admin/set-role
-     * POST /api/auth/admin/ban-user
-     * POST /api/auth/admin/unban-user
-     * POST /api/auth/admin/create-user
-     * GET  /api/auth/admin/list-users
-     * POST /api/auth/admin/remove-user
-     * POST /api/auth/admin/impersonate-user
-     * ...y más. Solo accesibles para roles en ADMIN_ROLES.
-     */
-    admin({
-      defaultRole: DEFAULT_ROLE,
-      adminRoles: ADMIN_ROLES,
-      ac,
-      roles,
-    }),
+    
 
     /**
      * JWT Plugin — emite JWT firmados con clave asimétrica (EdDSA/Ed25519)
@@ -106,9 +77,7 @@ export const auth = betterAuth({
             email: user.email,
             name: user.name,
             emailVerified: user.emailVerified,
-            // El rol viene del campo `role` en la tabla `user`,
-            // gestionado por el plugin Admin. Sin queries adicionales.
-            role: (user as typeof user & { role?: string }).role ?? DEFAULT_ROLE,
+            
           };
         },
       },

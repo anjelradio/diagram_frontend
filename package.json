@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@react-email/render": "^2.0.9",
+    "@xyflow/react": "^12.11.6",
     "better-auth": "^1.6.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

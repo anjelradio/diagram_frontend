@@ -19,41 +19,41 @@
    * Aplica a: Dialog (modales), AlertDialog, Sheet (paneles laterales/bottom sheets),
    * Popover y DropdownMenu.
    */
-  --app-surface: oklch(1 0 0);
+  --app-surface: oklch(0.218 0.006 271.13);
   --app-surface-foreground: oklch(0.145 0 0);
 
   /* 
    * ── Fondo General de la Aplicación ────────────────────────────────────────
    * Aplica al contenedor principal / fondo de la página (bg-app-bg).
    */
-  --app-bg: oklch(1 0 0);
+  --app-bg: oklch(0.2509 0.0015 197.06);
 
   /* 
    * ── Color Primario (Marca / Acción Principal) ──────────────────────────────
    * Disponible mediante clases de Tailwind: bg-app-primary, text-app-primary, etc.
    */
-  --app-primary: oklch(0.205 0 0);
+  --app-primary: oklch(0.7 0.1 288);
   --app-primary-foreground: oklch(0.985 0 0);
 
   /* 
    * ── Color Secundario y Atenuado ───────────────────────────────────────────
    * Disponible mediante clases de Tailwind: bg-app-secondary, text-app-secondary, etc.
    */
-  --app-secondary: oklch(0.95 0 0);
+  --app-secondary: oklch(0.5461 0.2152 262.88);
   --app-secondary-foreground: var(--app-primary);
 
   /* 
    * ── Color Terciario (Bordes y Líneas Divisorias) ──────────────────────────
    * Disponible mediante clases de Tailwind: bg-app-tertiary, border-app-tertiary, etc.
    */
-  --app-tertiary: oklch(0.922 0 0);
+  --app-tertiary: oklch(0.6959 0.1491 162.48);
   --app-tertiary-foreground: oklch(0.205 0 0);
 
   /* 
    * ── Neutros Base y Contraste Fuerte ───────────────────────────────────────
    * Tinta neutra base para contrastes firmes e iconos (bg-app-neutral, text-app-neutral).
    */
-  --app-neutral: oklch(0.145 0 0);
+  --app-neutral: oklch(0.218 0.006 271.13);
 
   /* 
    * ── Texto Secundario y Atenuado (Muted) ───────────────────────────────────
@@ -69,19 +69,19 @@
    * Encabezados y Títulos:
    * Aplica a: Todos los títulos HTML (h1, h2, h3, h4, h5, h6).
    */
-  --app-headline-foreground: oklch(0.145 0 0); 
+  --app-headline-foreground: oklch(0.9106 0.004 286.32); 
 
   /* 
    * Texto de Cuerpo:
    * Aplica a: Todo el texto general de lectura (body) y párrafos estándar (<p>).
    */
-  --app-body-foreground: oklch(0.35 0 0); 
+  --app-body-foreground: oklch(0.819 0.0226 297.33); 
 
   /* 
    * Etiquetas de Formulario:
    * Aplica a: Textos de etiquetas de campos (<label>, <Label>).
    */
-  --app-label-foreground: oklch(0.45 0 0); 
+  --app-label-foreground: oklch(0.819 0.0226 297.33); 
 
   /* 
    * ── Estados del Sistema y Feedback ────────────────────────────────────────
