@@ -90,7 +90,22 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-glow-one,
   .animate-glow-two,
-  .animate-glow-three {
+  .animate-glow-three,
+  .animate-marquee-pingpong {
     animation: none !important;
+    transform: none !important;
+  }
+}
+
+/* Animación ping-pong para nombres de atributos largos con desbordamiento */
+@keyframes marquee-pingpong {
+  0%, 15% {
+    transform: translate3d(0, 0, 0);
+  }
+  45%, 65% {
+    transform: translate3d(var(--marquee-distance, 0px), 0, 0);
+  }
+  95%, 100% {
+    transform: translate3d(0, 0, 0);
   }
 }

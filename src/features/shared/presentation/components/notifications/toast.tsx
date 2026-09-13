@@ -35,10 +35,10 @@ export const appToast = {
       title: message,
       icon: <CircleCheck className="text-emerald-500 size-5" />,
     }),
-  error: (title: string, message: string) =>
+  error: (title: string, message?: string) =>
     sileo.error({
-      title: title,
-      description: message,
+      title: message ? title : "Error",
+      description: message ?? title,
       icon: <CircleX className="text-destructive size-5" />,
     }),
   info: (message: string) =>

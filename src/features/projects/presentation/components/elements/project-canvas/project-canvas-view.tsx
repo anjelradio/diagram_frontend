@@ -11,12 +11,16 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
 import type { Project } from "@/features/projects/domain/entities/project.entity";
 import type { ProjectMember } from "@/features/projects/domain/entities/project-member.entity";
+import type { DiagramSnapshot } from "@/features/diagram/domain/entities/diagram-class.entity";
 import {
-  CanvasTool,
   ProjectCanvasBottomControls,
-  ProjectFlowCanvas,
 } from "./project-flow-canvas";
-import { ProjectCanvasToolbar } from "./project-canvas-toolbar";
+import {
+  ProjectCanvasToolbar,
+  type CanvasTool,
+} from "./project-canvas-toolbar";
+import { DiagramCanvasView } from "@/features/diagram/presentation/components/elements/diagram-canvas/diagram-canvas-view";
+import { DiagramSyncBadge } from "@/features/diagram/presentation/components/elements/diagram-canvas/diagram-sync-badge";
 import { ProjectActionsMenu } from "./project-actions-menu";
 import { ProjectCommandDialog } from "./project-command-dialog";
 import { ProjectSharePopover } from "./project-share-popover";
@@ -27,6 +31,8 @@ import { DeleteProjectDialog } from "./delete-project-dialog";
 type ProjectCanvasViewProps = {
   project: Project;
   initialMembers?: ProjectMember[];
+  initialSnapshot?: DiagramSnapshot;
+  viewerId: string;
 };
 
 /**
@@ -37,10 +43,14 @@ type ProjectCanvasViewProps = {
 export function ProjectCanvasView({
   project,
   initialMembers = [],
+  initialSnapshot,
+  viewerId,
 }: ProjectCanvasViewProps) {
   const [currentProject, setCurrentProject] = useState<Project>(project);
   const [activeTool, setActiveTool] = useState<CanvasTool>("cursor");
   const [isTemporaryHand, setIsTemporaryHand] = useState(false);
+
+  const canEdit = true;
 
   // Estados de modales y diálogos
   const [isCommandOpen, setIsCommandOpen] = useState(false);
@@ -98,6 +108,14 @@ export function ProjectCanvasView({
         setActiveTool("hand");
         return;
       }
+
+      // C: Selección de herramienta Crear clase UML (condicionada a canEdit)
+      if (e.key.toLowerCase() === "c") {
+        if (canEdit) {
+          setActiveTool("create-class");
+        }
+        return;
+      }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -113,13 +131,19 @@ export function ProjectCanvasView({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, []);
+  }, [canEdit]);
 
   return (
     <ReactFlowProvider>
       <div className="relative w-screen h-screen overflow-hidden select-none bg-[#212224]">
-      {/* Sombra / degradado superior traslúcido de Stitch */}
-      <div className="fixed top-0 inset-x-0 h-24 bg-gradient-to-b from-[#121316]/90 via-[#121316]/40 to-transparent pointer-events-none z-20" />
+      {/* Sombra / degradado superior sutil y continuo sin líneas de corte */}
+      <div
+        className="fixed top-0 inset-x-0 h-36 pointer-events-none z-20 select-none"
+        style={{
+          background:
+            "linear-gradient(to bottom, rgba(33, 34, 36, 0.7) 0%, rgba(33, 34, 36, 0.45) 30%, rgba(33, 34, 36, 0.2) 60%, rgba(33, 34, 36, 0.05) 85%, transparent 100%)",
+        }}
+      />
 
       {/* Encabezado flotante minimalista */}
       <header className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between py-3 px-5 pointer-events-none">
@@ -169,6 +193,9 @@ export function ProjectCanvasView({
               </span>
             </div>
           )}
+
+          {/* Badge de estado de sincronización al lado del nombre del proyecto */}
+          <DiagramSyncBadge />
         </div>
 
         {/* Derecha: Acciones, Compartir y Colaboradores */}
@@ -221,13 +248,18 @@ export function ProjectCanvasView({
       <ProjectCanvasToolbar
         activeTool={activeTool}
         isTemporaryHand={isTemporaryHand}
+        canEdit={canEdit}
         onSelectTool={setActiveTool}
       />
 
-      {/* Lienzo interactivo React Flow */}
-      <ProjectFlowCanvas
+      {/* Lienzo interactivo React Flow con soporte de clases de diagrama */}
+      <DiagramCanvasView
+        projectId={currentProject.id}
+        viewerId={viewerId}
+        initialSnapshot={initialSnapshot}
         activeTool={activeTool}
         isTemporaryHand={isTemporaryHand}
+        onClassCreated={() => setActiveTool("cursor")}
       />
 
       {/* Pie de controles flotantes */}

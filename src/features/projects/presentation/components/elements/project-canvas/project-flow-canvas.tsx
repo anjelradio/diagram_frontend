@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import {
   Background,
   BackgroundVariant,
+  PanOnScrollMode,
   ReactFlow,
   useNodesState,
   useViewport,
@@ -126,6 +127,8 @@ export function ProjectFlowCanvas({
         minZoom={PROJECT_CANVAS_CONFIG.zoom.min}
         maxZoom={PROJECT_CANVAS_CONFIG.zoom.max}
         defaultViewport={PROJECT_CANVAS_CONFIG.viewport.default}
+        translateExtent={PROJECT_CANVAS_CONFIG.extent.translate}
+        nodeExtent={PROJECT_CANVAS_CONFIG.extent.node}
         zoomActivationKeyCode={
           PROJECT_CANVAS_CONFIG.shortcuts.zoomActivationKeyCode as unknown as string[]
         }
@@ -134,7 +137,7 @@ export function ProjectFlowCanvas({
         elementsSelectable={!isHandActive}
         nodesDraggable={!isHandActive}
         panOnScroll={PROJECT_CANVAS_CONFIG.navigation.panOnScroll}
-        panOnScrollMode={PROJECT_CANVAS_CONFIG.navigation.panOnScrollMode}
+        panOnScrollMode={PROJECT_CANVAS_CONFIG.navigation.panOnScrollMode as PanOnScrollMode}
         panOnScrollSpeed={PROJECT_CANVAS_CONFIG.navigation.panOnScrollSpeed}
         zoomOnScroll={true}
         zoomOnPinch={true}

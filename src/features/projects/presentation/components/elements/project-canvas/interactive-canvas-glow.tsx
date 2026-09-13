@@ -27,11 +27,10 @@ export function InteractiveCanvasGlow() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const viewportRef = useRef({ x, y, zoom });
-  viewportRef.current = { x, y, zoom };
-
   const startLoopRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
+    viewportRef.current = { x, y, zoom };
     // Si cambia el viewport mientras el resplandor está activo, reactivar el bucle para redibujar
     if (startLoopRef.current) {
       startLoopRef.current();
@@ -48,9 +47,8 @@ export function InteractiveCanvasGlow() {
     const prefersReducedMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)"
     ).matches;
-    const hasFinePointer = window.matchMedia("(any-pointer: fine)").matches;
 
-    if (prefersReducedMotion || !hasFinePointer) return;
+    if (prefersReducedMotion) return;
 
     let animationFrameId: number | null = null;
     let width = 0;
@@ -79,8 +77,8 @@ export function InteractiveCanvasGlow() {
 
     const resize = () => {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
-      width = window.innerWidth;
-      height = window.innerHeight;
+      width = canvas.parentElement?.clientWidth || window.innerWidth;
+      height = canvas.parentElement?.clientHeight || window.innerHeight;
 
       canvas.width = Math.floor(width * dpr);
       canvas.height = Math.floor(height * dpr);
@@ -105,7 +103,7 @@ export function InteractiveCanvasGlow() {
 
       // Limpieza localizada del recuadro sucio anterior (Dirty Rect)
       if (prevBox) {
-        const pad = 10;
+        const pad = 12;
         const clrX = Math.max(0, Math.floor(prevBox.minX - pad));
         const clrY = Math.max(0, Math.floor(prevBox.minY - pad));
         const clrW = Math.min(
@@ -131,8 +129,18 @@ export function InteractiveCanvasGlow() {
       const currentVp = viewportRef.current;
       const currentZoom = currentVp.zoom;
       const spacing = GRID_SPACING * currentZoom;
-      const offsetX = ((currentVp.x % spacing) + spacing) % spacing;
-      const offsetY = ((currentVp.y % spacing) + spacing) % spacing;
+      const scaledSize = BASE_DOT_SIZE * currentZoom;
+      const baseDotRadius = scaledSize / 2;
+
+      // Cálculo exacto del desfase alineado con el SVG <pattern> de React Flow Background
+      // En React Flow: pattern x = (x % scaledGap) con patternTransform translate(-scaledGap/2, -scaledGap/2) y cx = radius
+      const rawOffsetX =
+        (currentVp.x % spacing) - spacing / 2 + baseDotRadius;
+      const rawOffsetY =
+        (currentVp.y % spacing) - spacing / 2 + baseDotRadius;
+
+      const offsetX = ((rawOffsetX % spacing) + spacing) % spacing;
+      const offsetY = ((rawOffsetY % spacing) + spacing) % spacing;
 
       // Delimitación local: iterar solo la cuadrícula en el radio relevante
       const startX =
@@ -153,8 +161,6 @@ export function InteractiveCanvasGlow() {
       let currentMaxX = 0;
       let currentMaxY = 0;
       let drawnAny = false;
-
-      const baseDotRadius = (BASE_DOT_SIZE * currentZoom) / 2;
 
       for (let px = startX; px <= endX; px += spacing) {
         if (px < 0 || px > width) continue;
@@ -217,8 +223,9 @@ export function InteractiveCanvasGlow() {
     startLoopRef.current = startLoop;
 
     const handlePointerMove = (e: PointerEvent) => {
-      mouse.targetX = e.clientX;
-      mouse.targetY = e.clientY;
+      const rect = canvas.getBoundingClientRect();
+      mouse.targetX = e.clientX - rect.left;
+      mouse.targetY = e.clientY - rect.top;
       mouse.active = true;
       lastMoveTime = performance.now();
       startLoop();

@@ -25,16 +25,19 @@ export function ProjectJoinView({ code }: ProjectJoinViewProps) {
     async function processJoin() {
       try {
         const result = await joinProjectAction(code);
-        if (result.ok && result.data?.projectId) {
-          appToast.success("¡Te has unido al proyecto exitosamente!");
-          router.push(`/projects/${result.data.projectId}`);
-        } else {
-          appToast.error(
-            result.errors?.[0] ||
-              "El código de invitación es inválido o ha expirado.",
-          );
-          router.push("/projects");
+        if (result.ok) {
+          if (result.data?.projectId) {
+            appToast.success("¡Te has unido al proyecto exitosamente!");
+            router.push(`/projects/${result.data.projectId}`);
+            return;
+          }
         }
+        const errorMessage =
+          !result.ok && result.errors?.[0]
+            ? result.errors[0]
+            : "El código de invitación es inválido o ha expirado.";
+        appToast.error(errorMessage);
+        router.push("/projects");
       } catch {
         appToast.error("Ocurrió un error inesperado al unirse al proyecto.");
         router.push("/projects");

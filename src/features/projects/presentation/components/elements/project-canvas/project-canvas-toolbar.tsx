@@ -11,27 +11,29 @@ import {
 } from "lucide-react";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
 import { cn } from "@/lib/utils";
-import type { CanvasTool } from "./project-flow-canvas";
+export type CanvasTool = "cursor" | "select" | "hand" | "create-class";
 
 type ProjectCanvasToolbarProps = {
   activeTool: CanvasTool;
   isTemporaryHand: boolean;
+  canEdit?: boolean;
   onSelectTool: (tool: CanvasTool) => void;
 };
 
 /**
  * Barra de herramientas flotante vertical derecha, fiel al diseño de Stitch.
- * Proporciona selección de herramientas de navegación: Puntero (V), Marco de selección (M), y Mano (Espacio).
- * Las herramientas de creación futura comunican oportunamente su estado.
+ * Proporciona selección de herramientas de navegación y creación de clases.
  */
 export function ProjectCanvasToolbar({
   activeTool,
   isTemporaryHand,
+  canEdit = false,
   onSelectTool,
 }: ProjectCanvasToolbarProps) {
   const isHandActive = isTemporaryHand || activeTool === "hand";
   const isCursorActive = !isTemporaryHand && activeTool === "cursor";
   const isSelectActive = !isTemporaryHand && activeTool === "select";
+  const isCreateClassActive = !isTemporaryHand && activeTool === "create-class";
 
   const getButtonClass = (isActive: boolean) =>
     cn(
@@ -47,18 +49,19 @@ export function ProjectCanvasToolbar({
       className="fixed right-5 top-1/2 -translate-y-1/2 z-30 pointer-events-auto"
     >
       <div className="bg-[#191a1d] border border-white/10 shadow-xl rounded-full p-1.5 flex flex-col items-center gap-1.5 flex-shrink-0">
-        {/* Nueva Clase UML (Próximamente) */}
-        <button
-          type="button"
-          onClick={() =>
-            appToast.info("La creación de clases UML estará disponible próximamente.")
-          }
-          className={getButtonClass(false)}
-          title="Nueva Clase UML (Próximamente)"
-          aria-label="Nueva Clase UML (Próximamente)"
-        >
-          <SquarePlus className="w-4 h-4" />
-        </button>
+        {/* Nueva Clase UML (Creación activa para editores) */}
+        {canEdit && (
+          <button
+            type="button"
+            onClick={() => onSelectTool("create-class")}
+            className={getButtonClass(isCreateClassActive)}
+            title="Nueva Clase UML (+)"
+            aria-label="Nueva Clase UML (Herramienta +)"
+            aria-pressed={isCreateClassActive}
+          >
+            <SquarePlus className="w-4 h-4" />
+          </button>
+        )}
 
         {/* Relaciones UML (Próximamente) */}
         <button

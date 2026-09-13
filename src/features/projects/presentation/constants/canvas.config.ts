@@ -1,3 +1,5 @@
+import type { CoordinateExtent } from "@xyflow/react";
+
 /**
  * Configuración global centralizada para el lienzo de diagramas (React Flow).
  * 
@@ -7,13 +9,13 @@
 export const PROJECT_CANVAS_CONFIG = {
   /**
    * Límites y pasos de nivel de zoom.
-   * 0.65 = 65% de escala mínima.
+   * 0.50 = 50% de escala mínima.
    * 1.50 = 150% de escala máxima.
    */
   zoom: {
-    min: 0.65,
+    min: 0.5,
     max: 1.5,
-    default: 1.0,
+    default: 0.5,
     step: 0.1,
   },
 
@@ -29,10 +31,26 @@ export const PROJECT_CANVAS_CONFIG = {
   },
 
   /**
+   * Límites del lienzo (delimitado, no infinito) para evitar que el usuario se pierda.
+   * translateExtent delimita el área visible de navegación del viewport.
+   * nodeExtent delimita el área donde pueden situarse y arrastrarse las clases.
+   */
+  extent: {
+    translate: [
+      [-2560, -2016],
+      [2560, 2016],
+    ] as CoordinateExtent,
+    node: [
+      [-2400, -1856],
+      [2400, 1856],
+    ] as CoordinateExtent,
+  },
+
+  /**
    * Posición y zoom iniciales al montar el lienzo.
    */
   viewport: {
-    default: { x: 0, y: 0, zoom: 1.0 },
+    default: { x: 0, y: 0, zoom: 0.5 },
   },
 
   /**
