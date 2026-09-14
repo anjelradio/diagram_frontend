@@ -76,6 +76,7 @@ export const AttributeList = memo(function AttributeList({
 }: AttributeListProps) {
   const projectId = useAppStore((s) => s.projectId);
   const viewerId = useAppStore((s) => s.viewerId);
+  const canEdit = useAppStore((s) => s.canEdit);
   const repositionAttributeOptimistic = useAppStore(
     (s) => s.repositionAttributeOptimistic
   );
@@ -97,8 +98,14 @@ export const AttributeList = memo(function AttributeList({
   const secondaryAttributes = sortedAttributes.filter((a) => !a.isPrimaryKey);
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    if (!canEdit) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
+
+    const movingAttr = secondaryAttributes.find((a) => a.id === active.id);
+    if (!movingAttr || movingAttr.isForeignKey) return;
+    const overAttr = secondaryAttributes.find((a) => a.id === over.id);
+    if (overAttr?.isForeignKey) return;
 
     const oldIndex = secondaryAttributes.findIndex((a) => a.id === active.id);
     const newIndex = secondaryAttributes.findIndex((a) => a.id === over.id);
@@ -161,31 +168,43 @@ export const AttributeList = memo(function AttributeList({
         )}
 
         {/* Filas reordenables de atributos secundarios */}
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={secondaryAttributes.map((a) => a.id)}
-            strategy={verticalListSortingStrategy}
+        {canEdit ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
           >
-            {secondaryAttributes.map((attr) => {
-              const isSelected = selectedAttributeId === attr.id;
+            <SortableContext
+              items={secondaryAttributes.map((a) => a.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {secondaryAttributes.map((attr) => {
+                const isSelected = selectedAttributeId === attr.id;
 
-              return (
-                <SortableAttributeRow
-                  key={attr.id}
-                  classId={classId}
-                  attribute={attr}
-                  isSelected={isSelected}
-                  onSelect={onSelectAttribute}
-                  renderTypeTrigger={renderTypeTrigger}
-                />
-              );
-            })}
-          </SortableContext>
-        </DndContext>
+                return (
+                  <SortableAttributeRow
+                    key={attr.id}
+                    classId={classId}
+                    attribute={attr}
+                    isSelected={isSelected}
+                    onSelect={onSelectAttribute}
+                    renderTypeTrigger={renderTypeTrigger}
+                  />
+                );
+              })}
+            </SortableContext>
+          </DndContext>
+        ) : (
+          secondaryAttributes.map((attr) => (
+            <AttributeRow
+              key={attr.id}
+              classId={classId}
+              attribute={attr}
+              isSelected={false}
+              renderTypeTrigger={renderTypeTrigger}
+            />
+          ))
+        )}
 
         {sortedAttributes.length === 0 && (
           <div className="text-[11px] text-slate-500 italic px-2 py-1 select-none">

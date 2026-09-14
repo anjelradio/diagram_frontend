@@ -2,12 +2,14 @@
 
 import { memo, useRef, useEffect } from "react";
 import { Box } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export type ClassNodeHeaderProps = {
   classId: string;
   name: string;
   isEditing: boolean;
   nameValue: string;
+  canEdit?: boolean;
   onStartEdit: () => void;
   onNameChange: (value: string) => void;
   onCommit: () => void;
@@ -17,12 +19,13 @@ export type ClassNodeHeaderProps = {
 /**
  * Cabecera de la tarjeta de clase UML.
  * Muestra el ícono representativo y el nombre de la clase,
- * con soporte de edición inline por doble clic.
+ * con soporte de edición inline por doble clic condicionado a canEdit.
  */
 export const ClassNodeHeader = memo(function ClassNodeHeader({
   name,
   isEditing,
   nameValue,
+  canEdit = false,
   onStartEdit,
   onNameChange,
   onCommit,
@@ -39,6 +42,7 @@ export const ClassNodeHeader = memo(function ClassNodeHeader({
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!canEdit) return;
     onStartEdit();
   };
 
@@ -71,8 +75,11 @@ export const ClassNodeHeader = memo(function ClassNodeHeader({
           />
         ) : (
           <h4
-            className="text-sm font-bold text-white tracking-tight truncate leading-tight cursor-pointer hover:text-indigo-200 transition-colors"
-            title={`Doble clic para renombrar: ${name}`}
+            className={cn(
+              "text-sm font-bold text-white tracking-tight truncate leading-tight select-none",
+              canEdit && "cursor-pointer hover:text-indigo-200 transition-colors"
+            )}
+            title={canEdit ? `Doble clic para renombrar: ${name}` : name}
           >
             {name}
           </h4>

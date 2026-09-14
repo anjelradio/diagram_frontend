@@ -11,6 +11,9 @@ import {
 import { ActionButton } from "@/features/shared/presentation/components/custom-buttons/action-button";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
 import { authClient } from "@/lib/auth-client";
+import type {
+  ProjectCanvasCapabilities,
+} from "@/features/projects/domain/entities/project.entity";
 import type { ProjectMember } from "@/features/projects/domain/entities/project-member.entity";
 import {
   demoteMemberAction,
@@ -25,6 +28,7 @@ import {
 type ProjectMembersPopoverProps = {
   projectId: string;
   initialMembers?: ProjectMember[];
+  capabilities?: ProjectCanvasCapabilities;
 };
 
 function getInitials(name: string): string {
@@ -44,7 +48,9 @@ function getInitials(name: string): string {
 export function ProjectMembersPopover({
   projectId,
   initialMembers = [],
+  capabilities,
 }: ProjectMembersPopoverProps) {
+  const canManage = capabilities?.canManageMembers ?? false;
   const { data: session } = authClient.useSession();
   const [members, setMembers] = useState<ProjectMember[]>(initialMembers);
   const [open, setOpen] = useState(false);
@@ -235,34 +241,36 @@ export function ProjectMembersPopover({
                         {isEditor ? "Editor" : "Lector"}
                       </span>
 
-                      <div className="flex items-center gap-1">
-                        {isEditor ? (
-                          <ActionButton
-                            ariaLabel="Cambiar a Lector"
-                            title="Cambiar a Lector"
-                            onClick={() => handleOpenConfirm(member, "demote")}
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </ActionButton>
-                        ) : (
-                          <ActionButton
-                            ariaLabel="Cambiar a Editor"
-                            title="Cambiar a Editor"
-                            onClick={() => handleOpenConfirm(member, "promote")}
-                          >
-                            <Pen className="w-3 h-3" />
-                          </ActionButton>
-                        )}
+                      {canManage && (
+                        <div className="flex items-center gap-1">
+                          {isEditor ? (
+                            <ActionButton
+                              ariaLabel="Cambiar a Lector"
+                              title="Cambiar a Lector"
+                              onClick={() => handleOpenConfirm(member, "demote")}
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </ActionButton>
+                          ) : (
+                            <ActionButton
+                              ariaLabel="Cambiar a Editor"
+                              title="Cambiar a Editor"
+                              onClick={() => handleOpenConfirm(member, "promote")}
+                            >
+                              <Pen className="w-3 h-3" />
+                            </ActionButton>
+                          )}
 
-                        <ActionButton
-                          ariaLabel="Eliminar del proyecto"
-                          title="Eliminar del proyecto"
-                          variant="destructive"
-                          onClick={() => handleOpenConfirm(member, "remove")}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </ActionButton>
-                      </div>
+                          <ActionButton
+                            ariaLabel="Eliminar del proyecto"
+                            title="Eliminar del proyecto"
+                            variant="destructive"
+                            onClick={() => handleOpenConfirm(member, "remove")}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </ActionButton>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -272,17 +280,19 @@ export function ProjectMembersPopover({
         </PopoverContent>
       </Popover>
 
-      {/* Diálogo de confirmación para promover, degradar o remover */}
-      <ProjectMemberConfirmationDialog
-        open={confirmMember !== null && actionType !== null}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) handleCloseConfirm();
-        }}
-        member={confirmMember}
-        actionType={actionType}
-        isPending={isPending}
-        onConfirm={handleConfirmAction}
-      />
+      {/* Diálogo de confirmación para promover, degradar o remover (solo para quien puede administrar) */}
+      {canManage && (
+        <ProjectMemberConfirmationDialog
+          open={confirmMember !== null && actionType !== null}
+          onOpenChange={(isOpen) => {
+            if (!isOpen) handleCloseConfirm();
+          }}
+          member={confirmMember}
+          actionType={actionType}
+          isPending={isPending}
+          onConfirm={handleConfirmAction}
+        />
+      )}
     </>
   );
 }

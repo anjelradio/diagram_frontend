@@ -26,3 +26,35 @@ export type ProjectListItem = Project;
 export type ProjectTab = "owned" | "shared";
 
 export type ProjectSearchTerm = string;
+
+export const ProjectAccessRole = {
+  OWNER: "OWNER",
+  EDITOR: "EDITOR",
+  READER: "READER",
+} as const;
+
+export type ProjectAccessRole =
+  (typeof ProjectAccessRole)[keyof typeof ProjectAccessRole];
+
+
+export type ProjectDetail = {
+  id: string;
+  name: string;
+  description: string | null;
+  thumbnailUrl: string | null;
+  accessRole: ProjectAccessRole;
+};
+
+export type ProjectCanvasCapabilities = {
+  canViewProject: boolean;
+  canPanAndZoom: boolean;
+  canEditDiagram: boolean;
+  canViewToolbar: boolean;
+  canExportOrGenerate: boolean;
+  canShareInvitation: boolean;
+  canEditProjectDetails: boolean;
+  canManageMembers: boolean;
+  canViewHistoricalMembers: boolean;
+  canDuplicateOrDeleteProject: boolean;
+};
+

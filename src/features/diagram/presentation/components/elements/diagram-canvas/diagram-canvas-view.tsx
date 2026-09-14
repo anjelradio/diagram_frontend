@@ -8,6 +8,7 @@ type DiagramCanvasViewProps = {
   projectId: string;
   viewerId: string;
   initialSnapshot?: DiagramSnapshot;
+  canEdit?: boolean;
   activeTool: CanvasTool;
   isTemporaryHand: boolean;
   onClassCreated?: () => void;
@@ -17,6 +18,7 @@ export function DiagramCanvasView({
   projectId,
   viewerId,
   initialSnapshot,
+  canEdit = false,
   activeTool,
   isTemporaryHand,
   onClassCreated,
@@ -25,6 +27,7 @@ export function DiagramCanvasView({
     projectId,
     viewerId,
     initialSnapshot,
+    canEdit,
   });
 
   return (

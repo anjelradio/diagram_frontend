@@ -79,9 +79,14 @@ export function DiagramSyncBadge({ className }: DiagramSyncBadgeProps) {
       : "Error al sincronizar con el servidor. Haz clic para reintentar.";
   } else if (syncStatus === "pending") {
     dotClass = "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.7)]";
-    label = "Guardando...";
     isPulsing = true;
-    title = "Guardando cambios en el servidor...";
+    if (syncError && syncError.toLowerCase().includes("reintent")) {
+      label = "Reintentando...";
+      title = `${syncError} Los cambios se conservan localmente.`;
+    } else {
+      label = "Guardando...";
+      title = "Guardando cambios en el servidor...";
+    }
   }
 
   return (

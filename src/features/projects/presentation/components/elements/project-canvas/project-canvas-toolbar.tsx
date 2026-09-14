@@ -11,7 +11,15 @@ import {
 } from "lucide-react";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
 import { cn } from "@/lib/utils";
-export type CanvasTool = "cursor" | "select" | "hand" | "create-class";
+import { useAppStore } from "@/features/shared/presentation/store/app-store";
+import { RelationPickerPopover } from "@/features/diagram/presentation/components/elements/diagram-canvas/relations/relation-picker-popover";
+
+export type CanvasTool =
+  | "cursor"
+  | "select"
+  | "hand"
+  | "create-class"
+  | "relation";
 
 type ProjectCanvasToolbarProps = {
   activeTool: CanvasTool;
@@ -22,7 +30,7 @@ type ProjectCanvasToolbarProps = {
 
 /**
  * Barra de herramientas flotante vertical derecha, fiel al diseño de Stitch.
- * Proporciona selección de herramientas de navegación y creación de clases.
+ * Proporciona selección de herramientas de navegación, creación de clases y relaciones UML.
  */
 export function ProjectCanvasToolbar({
   activeTool,
@@ -30,10 +38,23 @@ export function ProjectCanvasToolbar({
   canEdit = false,
   onSelectTool,
 }: ProjectCanvasToolbarProps) {
+  const isRelationPickerOpen = useAppStore((s) => s.isRelationPickerOpen);
+  const setRelationPickerOpen = useAppStore((s) => s.setRelationPickerOpen);
+  const activeRelationPreset = useAppStore((s) => s.activeRelationPreset);
+
+  if (!canEdit) {
+    return null;
+  }
+
   const isHandActive = isTemporaryHand || activeTool === "hand";
   const isCursorActive = !isTemporaryHand && activeTool === "cursor";
   const isSelectActive = !isTemporaryHand && activeTool === "select";
   const isCreateClassActive = !isTemporaryHand && activeTool === "create-class";
+  const isRelationActive =
+    !isTemporaryHand &&
+    (activeTool === "relation" ||
+      isRelationPickerOpen ||
+      activeRelationPreset !== null);
 
   const getButtonClass = (isActive: boolean) =>
     cn(
@@ -44,37 +65,43 @@ export function ProjectCanvasToolbar({
     );
 
   return (
-    <aside
-      aria-label="Herramientas del lienzo"
-      className="fixed right-5 top-1/2 -translate-y-1/2 z-30 pointer-events-auto"
-    >
-      <div className="bg-[#191a1d] border border-white/10 shadow-xl rounded-full p-1.5 flex flex-col items-center gap-1.5 flex-shrink-0">
-        {/* Nueva Clase UML (Creación activa para editores) */}
-        {canEdit && (
-          <button
-            type="button"
-            onClick={() => onSelectTool("create-class")}
-            className={getButtonClass(isCreateClassActive)}
-            title="Nueva Clase UML (+)"
-            aria-label="Nueva Clase UML (Herramienta +)"
-            aria-pressed={isCreateClassActive}
-          >
-            <SquarePlus className="w-4 h-4" />
-          </button>
-        )}
+    <div className="fixed right-5 top-1/2 -translate-y-1/2 z-30 flex items-center gap-3 pointer-events-auto">
+      {/* Panel Flotante de Relaciones UML */}
+      <RelationPickerPopover />
 
-        {/* Relaciones UML (Próximamente) */}
-        <button
-          type="button"
-          onClick={() =>
-            appToast.info("El catálogo de relaciones UML estará disponible próximamente.")
-          }
-          className={getButtonClass(false)}
-          title="Relaciones UML (Próximamente)"
-          aria-label="Relaciones UML (Próximamente)"
-        >
-          <Network className="w-4 h-4" />
-        </button>
+      {/* Barra vertical de herramientas (Pill) */}
+      <aside aria-label="Herramientas del lienzo">
+        <div className="bg-[#191a1d] border border-white/10 shadow-xl rounded-full p-1.5 flex flex-col items-center gap-1.5 flex-shrink-0">
+          {/* Nueva Clase UML (Creación activa para editores) */}
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => onSelectTool("create-class")}
+              className={getButtonClass(isCreateClassActive)}
+              title="Nueva Clase UML (+)"
+              aria-label="Nueva Clase UML (Herramienta +)"
+              aria-pressed={isCreateClassActive}
+            >
+              <SquarePlus className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Relaciones UML */}
+          {canEdit && (
+            <button
+              type="button"
+              data-relation-toolbar-button="true"
+              onClick={() => {
+                setRelationPickerOpen(!isRelationPickerOpen);
+              }}
+              className={getButtonClass(isRelationActive)}
+              title="Relaciones UML (R)"
+              aria-label="Relaciones UML (R)"
+              aria-pressed={isRelationActive}
+            >
+              <Network className="w-4 h-4" />
+            </button>
+          )}
 
         {/* Separador */}
         <div className="w-5 h-[1px] bg-white/15 my-0.5 rounded-full" />
@@ -142,5 +169,6 @@ export function ProjectCanvasToolbar({
         </button>
       </div>
     </aside>
+    </div>
   );
 }

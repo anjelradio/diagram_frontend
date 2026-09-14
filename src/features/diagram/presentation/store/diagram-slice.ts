@@ -6,16 +6,19 @@ import type {
   DiagramClassWithAttributes,
   DiagramSnapshot,
 } from "../../domain/entities/diagram-class.entity";
+import type { DiagramOperation } from "../../domain/entities/diagram-operation.entity";
+
 import type {
-  CreateAttributePayload,
-  CreateClassPayload,
-  DeleteAttributePayload,
-  DiagramOperation,
-  MoveClassPayload,
-  RenameClassPayload,
-  RepositionAttributePayload,
-  UpdateAttributePayload,
-} from "../../domain/entities/diagram-operation.entity";
+  DiagramCardinality,
+  DiagramRelation,
+  DiagramRelationHandle,
+  RelationPreset,
+} from "../../domain/entities/diagram-relation.entity";
+import type { PlannedRelationAggregate } from "../../domain/services/diagram-relation-planner";
+import {
+  projectDiagramOperation,
+  projectDiagramOperations,
+} from "./diagram-operation-projector";
 
 export type DiagramClassNodeData = {
   id: string;
@@ -27,7 +30,7 @@ export type DiagramClassNodeType = Node<DiagramClassNodeData, "diagramClass">;
 
 export type SyncStatus = "idle" | "pending" | "blocked";
 
-export type CanvasTool = "cursor" | "select" | "hand" | "create-class";
+export type CanvasTool = "cursor" | "select" | "hand" | "create-class" | "relation";
 
 export type SelectedAttribute = {
   classId: string;
@@ -48,6 +51,18 @@ export type DiagramSlice = {
   nodes: DiagramClassNodeType[];
   selectedAttribute: SelectedAttribute;
   activeTool: CanvasTool;
+  relations: DiagramRelation[];
+  activeRelationPreset: RelationPreset | null;
+  customRelationDraft: {
+    sourceCardinality: DiagramCardinality;
+    targetCardinality: DiagramCardinality;
+  } | null;
+  relationDraftSource: {
+    classId: string;
+    handle: DiagramRelationHandle;
+  } | null;
+  selectedRelationId: string | null;
+  isRelationPickerOpen: boolean;
 
   setDiagramContext: (
     projectId: string,
@@ -56,6 +71,27 @@ export type DiagramSlice = {
   ) => void;
   setSyncStatus: (status: SyncStatus, error?: string | null) => void;
   setActiveTool: (tool: CanvasTool) => void;
+  setRelationPickerOpen: (isOpen: boolean) => void;
+  selectRelationPreset: (preset: RelationPreset | null) => void;
+  setCustomRelationDraft: (
+    draft: {
+      sourceCardinality: DiagramCardinality;
+      targetCardinality: DiagramCardinality;
+    } | null
+  ) => void;
+  setRelationDraftSource: (
+    source: {
+      classId: string;
+      handle: DiagramRelationHandle;
+    } | null
+  ) => void;
+  setSelectedRelationId: (id: string | null) => void;
+  cancelRelationCreation: () => void;
+  setRelations: (relations: DiagramRelation[]) => void;
+  addOptimisticRelation: (relation: DiagramRelation) => void;
+  addOptimisticRelationAggregate: (aggregate: PlannedRelationAggregate) => void;
+  renameRelationOptimistic: (relationId: string, name: string) => void;
+  removeRelationOptimistic: (relationId: string) => void;
   hydrateSnapshot: (
     snapshot: DiagramSnapshot,
     pendingOps?: DiagramOperation[]
@@ -91,159 +127,234 @@ export const createDiagramSlice: StateCreator<
 > = (set) => ({
   projectId: null,
   viewerId: null,
-  canEdit: true,
+  canEdit: false,
   isHydrated: false,
   syncStatus: "idle",
   syncError: null,
   nodes: [],
   selectedAttribute: null,
   activeTool: "cursor",
+  relations: [],
+  activeRelationPreset: null,
+  customRelationDraft: null,
+  relationDraftSource: null,
+  selectedRelationId: null,
+  isRelationPickerOpen: false,
 
   setDiagramContext: (projectId, viewerId, canEdit) =>
-    set({ projectId, viewerId, canEdit }),
+    set((state) => ({
+      projectId,
+      viewerId,
+      canEdit,
+      ...(!canEdit
+        ? {
+            activeRelationPreset: null,
+            relationDraftSource: null,
+            customRelationDraft: null,
+            activeTool:
+              state.activeTool === "relation" ? "cursor" : state.activeTool,
+          }
+        : {}),
+    })),
 
   setSyncStatus: (status, error = null) =>
     set({ syncStatus: status, syncError: error }),
 
   setActiveTool: (activeTool) =>
-    set({ activeTool }),
+    set({
+      activeTool,
+      ...(activeTool !== "relation"
+        ? {
+            activeRelationPreset: null,
+            relationDraftSource: null,
+            customRelationDraft: null,
+          }
+        : {}),
+    }),
 
   setSelectedAttribute: (selectedAttribute) =>
     set({ selectedAttribute }),
 
-  hydrateSnapshot: (snapshot, pendingOps = []) => {
-    const classMap = new Map<string, DiagramClassWithAttributes>();
-    for (const c of snapshot.classes) {
-      classMap.set(c.id, {
-        id: c.id,
-        name: c.name,
-        positionX: c.positionX,
-        positionY: c.positionY,
-        attributes: (c.attributes || []).map((a) => ({ ...a })).sort((a, b) => a.position - b.position),
-      });
-    }
+  setRelationPickerOpen: (isRelationPickerOpen) =>
+    set({ isRelationPickerOpen }),
 
-    const sortedOps = [...pendingOps].sort((a, b) => a.sequence - b.sequence);
-    for (const op of sortedOps) {
-      if (op.kind === "CREATE") {
-        const p = op.payload as CreateClassPayload;
-        const pkAttr: DiagramAttribute = {
-          id: p.primaryAttribute.id,
-          name: p.primaryAttribute.name,
-          dataType: p.primaryAttribute.dataType,
-          position: p.primaryAttribute.position,
-          isPrimaryKey: p.primaryAttribute.isPrimaryKey,
-          isNullable: p.primaryAttribute.isNullable,
+  selectRelationPreset: (activeRelationPreset) =>
+    set({
+      activeRelationPreset,
+      activeTool: activeRelationPreset ? "relation" : "cursor",
+      relationDraftSource: null,
+      isRelationPickerOpen: false,
+    }),
+
+  setCustomRelationDraft: (customRelationDraft) =>
+    set({ customRelationDraft }),
+
+  setRelationDraftSource: (relationDraftSource) =>
+    set({ relationDraftSource }),
+
+  setSelectedRelationId: (selectedRelationId) =>
+    set({ selectedRelationId }),
+
+  cancelRelationCreation: () => {
+    set((state) => ({
+      activeTool: state.activeTool === "relation" ? "cursor" : state.activeTool,
+      activeRelationPreset: null,
+      relationDraftSource: null,
+      customRelationDraft: null,
+      isRelationPickerOpen: false,
+    }));
+  },
+
+  setRelations: (relations) => set({ relations }),
+
+  addOptimisticRelation: (relation) =>
+    set((state) => ({ relations: [...state.relations, relation] })),
+
+  renameRelationOptimistic: (relationId, name) =>
+    set((state) => ({
+      relations: state.relations.map((r) =>
+        r.id === relationId ? { ...r, name } : r
+      ),
+    })),
+
+  removeRelationOptimistic: (relationId) =>
+    set((state) => {
+      const snapshot: DiagramSnapshot = {
+        classes: state.nodes.map((n) => ({
+          id: n.id,
+          name: n.data.name,
+          positionX: n.position.x,
+          positionY: n.position.y,
+          attributes: n.data.attributes || [],
+        })),
+        relations: state.relations,
+      };
+
+      const projected = projectDiagramOperation(snapshot, {
+        operationId: "optimistic-delete-rel",
+        viewerId: state.viewerId || "",
+        projectId: state.projectId || "",
+        sequence: 0,
+        kind: "DELETE_RELATION",
+        relationId,
+        payload: { relationId },
+        createdAt: new Date().toISOString(),
+        attempts: 0,
+        state: "pending",
+      });
+
+      const nextNodes: DiagramClassNodeType[] = projected.classes.map((c) => {
+        const existingNode = state.nodes.find((n) => n.id === c.id);
+        return {
+          id: c.id,
+          type: "diagramClass",
+          position: { x: c.positionX, y: c.positionY },
+          selected: existingNode?.selected,
+          data: {
+            id: c.id,
+            name: c.name,
+            attributes: [...(c.attributes || [])].sort(
+              (a, b) => a.position - b.position
+            ),
+          },
         };
-        classMap.set(p.id, {
-          id: p.id,
-          name: p.name,
-          positionX: p.positionX,
-          positionY: p.positionY,
-          attributes: [pkAttr],
-        });
-      } else if (op.kind === "RENAME") {
-        const p = op.payload as RenameClassPayload;
-        const existing = classMap.get(op.classId);
-        if (existing) {
-          existing.name = p.name;
-        }
-      } else if (op.kind === "MOVE") {
-        const p = op.payload as MoveClassPayload;
-        const existing = classMap.get(op.classId);
-        if (existing) {
-          existing.positionX = p.positionX;
-          existing.positionY = p.positionY;
-        }
-      } else if (op.kind === "DELETE") {
-        classMap.delete(op.classId);
-      } else if (op.kind === "CREATE_ATTRIBUTE") {
-        const p = op.payload as CreateAttributePayload;
-        const existing = classMap.get(op.classId);
-        if (existing) {
-          const newAttr: DiagramAttribute = {
-            id: p.id,
-            name: p.name,
-            dataType: null,
-            position: p.position,
-            isPrimaryKey: false,
-            isNullable: true,
-          };
-          existing.attributes = [...existing.attributes, newAttr].sort(
+      });
+
+      return {
+        selectedRelationId:
+          state.selectedRelationId === relationId ? null : state.selectedRelationId,
+        nodes: nextNodes,
+        relations: projected.relations,
+      };
+    }),
+
+  addOptimisticRelationAggregate: (aggregate) => {
+    set((state) => {
+      let nextNodes = state.nodes;
+
+      if (aggregate.bridgeClass) {
+        const bridgeNode: DiagramClassNodeType = {
+          id: aggregate.bridgeClass.id,
+          type: "diagramClass",
+          position: {
+            x: aggregate.bridgeClass.positionX,
+            y: aggregate.bridgeClass.positionY,
+          },
+          data: {
+            id: aggregate.bridgeClass.id,
+            name: aggregate.bridgeClass.name,
+            attributes: [...aggregate.bridgeClass.attributes],
+          },
+        };
+        nextNodes = [...nextNodes, bridgeNode];
+      }
+
+      if (aggregate.foreignKeyAttribute) {
+        const fk = aggregate.foreignKeyAttribute;
+        nextNodes = nextNodes.map((node) => {
+          if (node.id !== fk.classId) return node;
+          const currentAttrs = node.data.attributes || [];
+          const updatedAttrs = [...currentAttrs, fk].sort(
             (a, b) => a.position - b.position
           );
-        }
-      } else if (op.kind === "UPDATE_ATTRIBUTE") {
-        const p = op.payload as UpdateAttributePayload;
-        const existing = classMap.get(op.classId);
-        if (existing) {
-          existing.attributes = existing.attributes.map((a) => {
-            if (a.id === p.attributeId) {
-              return {
-                ...a,
-                ...(p.name !== undefined ? { name: p.name } : {}),
-                ...(p.dataType !== undefined ? { dataType: p.dataType } : {}),
-                ...(p.isNullable !== undefined ? { isNullable: p.isNullable } : {}),
-              };
-            }
-            return a;
-          });
-        }
-      } else if (op.kind === "REPOSITION_ATTRIBUTE") {
-        const p = op.payload as RepositionAttributePayload;
-        const existing = classMap.get(op.classId);
-        if (existing) {
-          const pk = existing.attributes.find((a) => a.isPrimaryKey);
-          const moving = existing.attributes.find((a) => a.id === p.attributeId);
-          if (moving && !moving.isPrimaryKey) {
-            const others = existing.attributes.filter(
-              (a) => !a.isPrimaryKey && a.id !== p.attributeId
-            );
-            const targetIndex = Math.max(
-              0,
-              Math.min(p.position - 1, others.length)
-            );
-            others.splice(targetIndex, 0, moving);
-            const updated = others.map((attr, idx) => ({
-              ...attr,
-              position: idx + 1,
-            }));
-            existing.attributes = pk ? [pk, ...updated] : updated;
-          }
-        }
-      } else if (op.kind === "DELETE_ATTRIBUTE") {
-        const p = op.payload as DeleteAttributePayload;
-        const existing = classMap.get(op.classId);
-        if (existing) {
-          const pk = existing.attributes.find((a) => a.isPrimaryKey);
-          const updated = existing.attributes
-            .filter((a) => !a.isPrimaryKey && a.id !== p.attributeId)
-            .sort((a, b) => a.position - b.position)
-            .map((attr, idx) => ({
-              ...attr,
-              position: idx + 1,
-            }));
-          existing.attributes = pk ? [pk, ...updated] : updated;
-        }
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              attributes: updatedAttrs,
+            },
+          };
+        });
       }
-    }
 
-    const nodes: DiagramClassNodeType[] = Array.from(classMap.values()).map(
-      (c) => ({
+      if (aggregate.sharedPrimaryKeyAttribute) {
+        const spk = aggregate.sharedPrimaryKeyAttribute;
+        nextNodes = nextNodes.map((node) => {
+          if (node.id !== spk.classId) return node;
+          const currentAttrs = node.data.attributes || [];
+          const updatedAttrs = currentAttrs.map((a) =>
+            a.id === spk.id ? { ...spk } : a
+          );
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              attributes: updatedAttrs,
+            },
+          };
+        });
+      }
+
+      return {
+        nodes: nextNodes,
+        relations: [...state.relations, aggregate.relation],
+        activeRelationPreset: null,
+        relationDraftSource: null,
+        customRelationDraft: null,
+        activeTool: "cursor" as CanvasTool,
+      };
+    });
+  },
+
+  hydrateSnapshot: (snapshot, pendingOps = []) => {
+    const projected = projectDiagramOperations(snapshot, pendingOps);
+
+    const nodes: DiagramClassNodeType[] = projected.classes.map((c) => ({
+      id: c.id,
+      type: "diagramClass",
+      position: { x: c.positionX, y: c.positionY },
+      data: {
         id: c.id,
-        type: "diagramClass",
-        position: { x: c.positionX, y: c.positionY },
-        data: {
-          id: c.id,
-          name: c.name,
-          attributes: [...(c.attributes || [])].sort((a, b) => a.position - b.position),
-        },
-      })
-    );
+        name: c.name,
+        attributes: [...(c.attributes || [])].sort(
+          (a, b) => a.position - b.position
+        ),
+      },
+    }));
 
     set({
       nodes,
-      canEdit: true,
+      relations: [...(projected.relations || [])],
       isHydrated: true,
     });
   },
@@ -287,12 +398,76 @@ export const createDiagramSlice: StateCreator<
     }));
   },
 
-  removeNodesOptimistic: (ids) => {
-    const setIds = new Set(ids);
-    set((state) => ({
-      nodes: state.nodes.filter((n) => !setIds.has(n.id)),
-    }));
-  },
+  removeNodesOptimistic: (ids) =>
+    set((state) => {
+      let currentSnapshot: DiagramSnapshot = {
+        classes: state.nodes.map((n) => ({
+          id: n.id,
+          name: n.data.name,
+          positionX: n.position.x,
+          positionY: n.position.y,
+          attributes: n.data.attributes || [],
+        })),
+        relations: state.relations,
+      };
+
+      for (const id of ids) {
+        currentSnapshot = projectDiagramOperation(currentSnapshot, {
+          operationId: "optimistic-delete-class",
+          viewerId: state.viewerId || "",
+          projectId: state.projectId || "",
+          sequence: 0,
+          kind: "DELETE_CLASS",
+          classId: id,
+          payload: {},
+          createdAt: new Date().toISOString(),
+          attempts: 0,
+          state: "pending",
+        });
+      }
+
+      const nextNodes: DiagramClassNodeType[] = currentSnapshot.classes.map((c) => {
+        const existingNode = state.nodes.find((n) => n.id === c.id);
+        return {
+          id: c.id,
+          type: "diagramClass",
+          position: { x: c.positionX, y: c.positionY },
+          selected: existingNode?.selected,
+          data: {
+            id: c.id,
+            name: c.name,
+            attributes: [...(c.attributes || [])].sort(
+              (a, b) => a.position - b.position
+            ),
+          },
+        };
+      });
+
+      const nextSelectedRelationId = currentSnapshot.relations.some(
+        (r) => r.id === state.selectedRelationId
+      )
+        ? state.selectedRelationId
+        : null;
+
+      const draftSourceDeleted =
+        state.relationDraftSource &&
+        ids.includes(state.relationDraftSource.classId);
+
+      return {
+        nodes: nextNodes,
+        relations: currentSnapshot.relations,
+        selectedRelationId: nextSelectedRelationId,
+        ...(draftSourceDeleted
+          ? {
+              relationDraftSource: null,
+              activeRelationPreset: null,
+              customRelationDraft: null,
+              activeTool:
+                state.activeTool === "relation" ? "cursor" : state.activeTool,
+            }
+          : {}),
+      };
+    }),
 
   addAttributeOptimistic: (classId, attribute) => {
     set((state) => ({
@@ -318,9 +493,16 @@ export const createDiagramSlice: StateCreator<
       nodes: state.nodes.map((node) => {
         if (node.id !== classId) return node;
         const currentAttrs = node.data.attributes || [];
-        const nextAttrs = currentAttrs.map((attr) =>
-          attr.id === attributeId ? { ...attr, ...patch } : attr
-        );
+        const nextAttrs = currentAttrs.map((attr) => {
+          if (attr.id !== attributeId) return attr;
+          // PK (incluida PK compartida): completamente inmutable
+          if (attr.isPrimaryKey) return attr;
+          // FK secundaria: únicamente name puede modificarse
+          if (attr.isForeignKey) {
+            return patch.name !== undefined ? { ...attr, name: patch.name } : attr;
+          }
+          return { ...attr, ...patch };
+        });
         return {
           ...node,
           data: {
@@ -339,7 +521,7 @@ export const createDiagramSlice: StateCreator<
         const currentAttrs = node.data.attributes || [];
         const pk = currentAttrs.find((a) => a.isPrimaryKey);
         const moving = currentAttrs.find((a) => a.id === attributeId);
-        if (!moving || moving.isPrimaryKey) return node;
+        if (!moving || moving.isPrimaryKey || moving.isForeignKey) return node;
 
         const otherSecondaries = currentAttrs
           .filter((a) => !a.isPrimaryKey && a.id !== attributeId)
@@ -381,7 +563,7 @@ export const createDiagramSlice: StateCreator<
           if (node.id !== classId) return node;
           const currentAttrs = node.data.attributes || [];
           const target = currentAttrs.find((a) => a.id === attributeId);
-          if (!target || target.isPrimaryKey) return node;
+          if (!target || target.isPrimaryKey || target.isForeignKey) return node;
 
           const pk = currentAttrs.find((a) => a.isPrimaryKey);
           const remainingSecondaries = currentAttrs

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import type { DiagramAttribute } from "@/features/diagram/domain/entities/diagram-attribute.entity";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
 import { diagramOperationQueueRepositoryImpl } from "@/features/diagram/infrastructure/storage/diagram-operation-queue.repository";
+import { deriveDiagramAttributeCapabilities } from "@/features/diagram/domain/services/diagram-attribute-capabilities";
 import { AttributeTypePopover } from "./attribute-type-popover";
 
 export type AttributeRowProps = {
@@ -33,7 +34,10 @@ export const AttributeRow = memo(function AttributeRow({
   renderTypeTrigger,
   dragHandleProps,
 }: AttributeRowProps) {
+  const canEdit = useAppStore((s) => s.canEdit);
   const isPk = attribute.isPrimaryKey;
+  const isFk = Boolean(attribute.isForeignKey);
+  const capabilities = deriveDiagramAttributeCapabilities(attribute, canEdit);
 
   const projectId = useAppStore((s) => s.projectId);
   const viewerId = useAppStore((s) => s.viewerId);
@@ -91,13 +95,15 @@ export const AttributeRow = memo(function AttributeRow({
   const marqueeDuration = Math.min(Math.max(3, overflowDistance / 18), 8);
 
   const isRowSelected =
-    isSelected ||
-    (selectedAttribute?.classId === classId &&
-      selectedAttribute?.attributeId === attribute.id);
+    canEdit &&
+    capabilities.canDelete &&
+    (isSelected ||
+      (selectedAttribute?.classId === classId &&
+        selectedAttribute?.attributeId === attribute.id));
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isPk) {
+    if (capabilities.canDelete) {
       setSelectedAttribute({ classId, attributeId: attribute.id });
       onSelect?.(attribute.id);
     }
@@ -105,7 +111,7 @@ export const AttributeRow = memo(function AttributeRow({
 
   const handleStartEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isPk) return;
+    if (!capabilities.canRename) return;
     setIsEditing(true);
   };
 
@@ -155,7 +161,7 @@ export const AttributeRow = memo(function AttributeRow({
     <div
       onClick={handleClick}
       onDoubleClick={(e) => {
-        if (isPk) return;
+        if (!capabilities.canRename) return;
         const target = e.target as HTMLElement | null;
         if (
           !target?.closest("button") &&
@@ -169,31 +175,42 @@ export const AttributeRow = memo(function AttributeRow({
         "group/attr flex items-center justify-between text-xs py-1.5 px-2 rounded-lg transition-colors select-none",
         isRowSelected
           ? "bg-indigo-500/20 ring-1 ring-indigo-500/50"
-          : "hover:bg-white/5",
-        isPk ? "cursor-default" : "cursor-pointer"
+          : canEdit ? "hover:bg-white/5" : "",
+        capabilities.canRename || capabilities.canDelete ? "cursor-pointer" : "cursor-default"
       )}
       role="row"
-      aria-label={`Atributo ${attribute.name}${isPk ? " Llave Primaria" : ""}`}
-      tabIndex={isPk ? -1 : 0}
+      aria-label={`Atributo ${attribute.name}${isPk ? " Llave Primaria" : isFk ? " Llave Foránea" : ""}`}
+      tabIndex={capabilities.canDelete ? 0 : -1}
       onKeyDown={(e) => {
-        if (!isPk && (e.key === "Enter" || e.key === " ")) {
+        if (capabilities.canDelete && (e.key === "Enter" || e.key === " ")) {
           e.stopPropagation();
           setSelectedAttribute({ classId, attributeId: attribute.id });
           onSelect?.(attribute.id);
         }
       }}
     >
-      {/* Zona izquierda: Grip / Icono PK y Nombre */}
+      {/* Zona izquierda: Grip / Icono PK / Badge FK y Nombre */}
       <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
         {isPk ? (
           <span
-            title="Llave primaria (UUID, no modificable)"
+            title={
+              isFk
+                ? "Llave primaria compartida (UUID inmutable por generalización)"
+                : "Llave primaria (UUID inmutable)"
+            }
             className="inline-flex items-center gap-1 text-[9px] font-sans font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/30 px-1.5 py-0.5 rounded flex-shrink-0 select-none shadow-sm"
           >
             <KeyRound className="w-2.5 h-2.5" />
-            <span>PK</span>
+            <span>{isFk ? "PK / FK" : "PK"}</span>
           </span>
-        ) : (
+        ) : isFk ? (
+          <span
+            title="Llave foránea secundaria (inmutable salvo nombre)"
+            className="inline-flex items-center gap-1 text-[9px] font-sans font-semibold text-indigo-400 bg-indigo-400/10 border border-indigo-400/30 px-1.5 py-0.5 rounded flex-shrink-0 select-none shadow-sm"
+          >
+            <span>FK</span>
+          </span>
+        ) : capabilities.canReposition ? (
           <button
             type="button"
             className="text-slate-500 group-hover/attr:text-slate-300 transition-colors flex-shrink-0 cursor-grab active:cursor-grabbing p-0.5 -ml-1 nodrag touch-none"
@@ -202,7 +219,7 @@ export const AttributeRow = memo(function AttributeRow({
           >
             <GripVertical className="w-3.5 h-3.5" />
           </button>
-        )}
+        ) : null}
 
         {/* Nombre del atributo con edición inline por doble clic y efecto hover scroll */}
         <div
@@ -233,9 +250,17 @@ export const AttributeRow = memo(function AttributeRow({
             <span
               ref={nameTextRef}
               title={
-                isPk
-                  ? "Identificador único inmutable"
-                  : `Doble clic para renombrar: ${attribute.name}`
+                isPk && isFk
+                  ? "Llave primaria compartida (inmutable por generalización)"
+                  : isPk
+                    ? "Identificador único inmutable"
+                    : isFk
+                      ? capabilities.canRename
+                        ? `Doble clic para renombrar llave foránea: ${attribute.name}`
+                        : "Llave foránea no modificable"
+                      : capabilities.canRename
+                        ? `Doble clic para renombrar: ${attribute.name}`
+                        : attribute.name
               }
               style={
                 isMarqueeActive
@@ -256,7 +281,13 @@ export const AttributeRow = memo(function AttributeRow({
                   : "truncate max-w-full block",
                 isPk
                   ? "text-amber-200/90 font-semibold cursor-default"
-                  : "text-slate-200 font-medium hover:text-indigo-200 cursor-pointer"
+                  : isFk
+                    ? capabilities.canRename
+                      ? "text-indigo-200/90 font-medium hover:text-indigo-100 cursor-pointer"
+                      : "text-indigo-200/90 font-medium cursor-default"
+                    : capabilities.canRename
+                      ? "text-slate-200 font-medium hover:text-indigo-200 cursor-pointer"
+                      : "text-slate-200 font-medium cursor-default"
               )}
             >
               {attribute.name}
@@ -281,6 +312,21 @@ export const AttributeRow = memo(function AttributeRow({
             aria-label="Obligatorio"
           >
             *
+          </span>
+        ) : isFk ? (
+          <span
+            title={
+              attribute.isNullable
+                ? "Opcional (definido por relación)"
+                : "Obligatorio (definido por relación)"
+            }
+            className={cn(
+              "font-mono text-[10px] font-bold select-none px-0.5",
+              attribute.isNullable ? "text-slate-400" : "text-indigo-400/90"
+            )}
+            aria-label={attribute.isNullable ? "Opcional" : "Obligatorio"}
+          >
+            {attribute.isNullable ? "?" : "*"}
           </span>
         ) : attribute.isNullable ? (
           <span

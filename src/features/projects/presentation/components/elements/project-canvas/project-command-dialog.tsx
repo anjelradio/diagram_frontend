@@ -8,10 +8,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Keyboard, Search, X } from "lucide-react";
+import type {
+  ProjectCanvasCapabilities,
+} from "@/features/projects/domain/entities/project.entity";
 
 type ProjectCommandDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  capabilities?: ProjectCanvasCapabilities;
 };
 
 type ShortcutItem = {
@@ -75,10 +79,20 @@ const SHORTCUTS: ShortcutItem[] = [
 export function ProjectCommandDialog({
   open,
   onOpenChange,
+  capabilities,
 }: ProjectCommandDialogProps) {
   const [query, setQuery] = useState("");
+  const canEditDiagram = capabilities ? capabilities.canEditDiagram : true;
 
-  const filteredShortcuts = SHORTCUTS.filter((s) =>
+  const availableShortcuts = SHORTCUTS.filter((s) => {
+    if (!canEditDiagram) {
+      if (s.category === "Edición y Modelado (Próximamente)") return false;
+      if (s.keys.includes("V") || s.keys.includes("M")) return false;
+    }
+    return true;
+  });
+
+  const filteredShortcuts = availableShortcuts.filter((s) =>
     s.name.toLowerCase().includes(query.toLowerCase()) ||
     s.keys.some((k) => k.toLowerCase().includes(query.toLowerCase())) ||
     s.category.toLowerCase().includes(query.toLowerCase())

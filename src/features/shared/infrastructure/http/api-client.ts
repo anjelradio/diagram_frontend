@@ -27,7 +27,7 @@ import {
   ApiFileResult,
   ApiMaybeResult,
   ApiResult,
-} from "@/features/shared/domain/types/api-results";
+} from "../../domain/types/api-results.ts";
 import { errorResult, serverErrorResult } from "../errors/api-error";
 import { clearJWT, getJWT, refreshJWT } from "./jwt-manager";
 

@@ -15,9 +15,13 @@ export type DiagramAttributeDataType =
  */
 export type DiagramAttribute = {
   id: string;
+  classId?: string;
   name: string;
   dataType: DiagramAttributeDataType | null;
   position: number;
   isPrimaryKey: boolean;
   isNullable: boolean;
+  isForeignKey?: boolean;
+  referencedClassId?: string | null;
+  relationId?: string | null;
 };

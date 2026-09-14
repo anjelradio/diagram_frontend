@@ -1,4 +1,5 @@
 import type { DiagramAttribute } from './diagram-attribute.entity';
+import type { DiagramRelation } from './diagram-relation.entity';
 
 /**
  * Entidades del dominio de Diagrama para clases en el lienzo.
@@ -17,4 +18,5 @@ export type DiagramClassWithAttributes = DiagramClass & {
 
 export type DiagramSnapshot = {
   classes: DiagramClassWithAttributes[];
+  relations: DiagramRelation[];
 };

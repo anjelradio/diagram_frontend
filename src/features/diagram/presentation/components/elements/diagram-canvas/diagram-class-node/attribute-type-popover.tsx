@@ -49,6 +49,7 @@ export const AttributeTypePopover = memo(function AttributeTypePopover({
 
   const projectId = useAppStore((s) => s.projectId);
   const viewerId = useAppStore((s) => s.viewerId);
+  const canEdit = useAppStore((s) => s.canEdit);
   const updateAttributeOptimistic = useAppStore(
     (s) => s.updateAttributeOptimistic
   );
@@ -58,9 +59,42 @@ export const AttributeTypePopover = memo(function AttributeTypePopover({
     return (
       <span
         className="font-mono text-[11px] px-1.5 py-0.5 rounded text-right text-amber-300/80 font-medium select-none"
-        title="Llave primaria (UUID inmutable)"
+        title={
+          attribute.isForeignKey
+            ? "Llave primaria compartida (UUID inmutable)"
+            : "Llave primaria (UUID inmutable)"
+        }
       >
         UUID
+      </span>
+    );
+  }
+
+  // La llave foránea derivada conserva tipo UUID estático e inmutable (RF-020)
+  if (attribute.isForeignKey) {
+    return (
+      <span
+        className="font-mono text-[11px] px-1.5 py-0.5 rounded text-right text-indigo-300/80 font-medium select-none"
+        title="Llave foránea derivada (UUID inmutable)"
+      >
+        UUID
+      </span>
+    );
+  }
+
+  // Para modo reader, renderizar tipo estático sin popover ni interacción
+  if (!canEdit) {
+    return (
+      <span
+        className={cn(
+          "font-mono text-[11px] px-1.5 py-0.5 rounded text-right select-none",
+          attribute.dataType
+            ? "text-indigo-400 font-medium"
+            : "text-slate-500 italic"
+        )}
+        title={attribute.dataType || "sin tipo"}
+      >
+        {attribute.dataType || "sin tipo"}
       </span>
     );
   }

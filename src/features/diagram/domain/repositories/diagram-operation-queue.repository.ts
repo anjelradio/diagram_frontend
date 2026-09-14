@@ -1,4 +1,7 @@
-import type { DiagramOperation } from "../entities/diagram-operation.entity";
+import type {
+  DiagramOperation,
+  DiagramOperationInput,
+} from "../entities/diagram-operation.entity";
 
 /**
  * Contrato de Dominio para el almacenamiento duradero y local (IndexedDB) de la cola de operaciones.
@@ -8,7 +11,7 @@ export interface DiagramOperationQueueRepository {
   /**
    * Encola una nueva operación asignándole la siguiente secuencia ascendente de forma transaccional.
    */
-  enqueue(operation: Omit<DiagramOperation, "sequence">): Promise<DiagramOperation>;
+  enqueue(operation: DiagramOperationInput): Promise<DiagramOperation>;
 
   /**
    * Obtiene la siguiente operación pendiente (menor secuencia) para procesar, o null si la cola está vacía.

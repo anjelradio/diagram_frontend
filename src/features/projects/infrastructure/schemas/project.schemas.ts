@@ -17,6 +17,16 @@ export const projectListResponseSchema = z.object({
   items: z.array(projectItemResponseSchema),
 });
 
+export const projectAccessRoleSchema = z.enum(["OWNER", "EDITOR", "READER"]);
+
+export const projectDetailResponseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  thumbnail_url: z.string().nullable(),
+  access_role: projectAccessRoleSchema,
+});
+
 export const projectCreatedResponseSchema = z.object({
   id: z.string(),
 });
@@ -43,6 +53,8 @@ export const updateProjectRequestSchema = z.object({
 
 export type ProjectItemResponse = z.infer<typeof projectItemResponseSchema>;
 export type ProjectListResponse = z.infer<typeof projectListResponseSchema>;
+export type ProjectAccessRoleResponse = z.infer<typeof projectAccessRoleSchema>;
+export type ProjectDetailResponse = z.infer<typeof projectDetailResponseSchema>;
 export type ProjectCreatedResponse = z.infer<typeof projectCreatedResponseSchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectInputSchema>;
 export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;

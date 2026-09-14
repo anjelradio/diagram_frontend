@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { diagramRelationReadSchema } from "./diagram-relation.schemas";
 
 /**
  * Esquemas Zod para validación y tipado del transporte HTTP del diagrama completo y sus atributos.
@@ -21,6 +22,9 @@ export const diagramAttributeReadSchema = z.object({
   position: z.number().int().min(0),
   is_primary_key: z.boolean(),
   is_nullable: z.boolean(),
+  is_foreign_key: z.boolean().default(false),
+  referenced_class_id: z.string().uuid().nullable().default(null),
+  relation_id: z.string().uuid().nullable().default(null),
 });
 
 export const diagramClassWithAttributesReadSchema = z.object({
@@ -33,6 +37,7 @@ export const diagramClassWithAttributesReadSchema = z.object({
 
 export const diagramReadSchema = z.object({
   classes: z.array(diagramClassWithAttributesReadSchema),
+  relations: z.array(diagramRelationReadSchema).default([]),
 });
 
 export type DiagramAttributeDataTypeDto = z.infer<typeof diagramAttributeDataTypeSchema>;

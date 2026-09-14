@@ -1,0 +1,322 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import type { DiagramClassWithAttributes } from "../entities/diagram-class.entity.ts";
+import {
+  calculateBridgeClassPosition,
+  generateBridgeClassName,
+  generateForeignKeyName,
+  planRelationCreation,
+} from "./diagram-relation-planner.ts";
+
+describe("DiagramRelationPlanner Service", () => {
+  const mockClassA: DiagramClassWithAttributes = {
+    id: "11111111-1111-4111-8111-111111111111",
+    name: "Author",
+    positionX: 100,
+    positionY: 200,
+    attributes: [
+      {
+        id: "a1",
+        name: "id",
+        dataType: "UUID",
+        position: 0,
+        isPrimaryKey: true,
+        isNullable: false,
+      },
+    ],
+  };
+
+  const mockClassB: DiagramClassWithAttributes = {
+    id: "22222222-2222-4222-8222-222222222222",
+    name: "Book",
+    positionX: 300,
+    positionY: 400,
+    attributes: [
+      {
+        id: "b1",
+        name: "id",
+        dataType: "UUID",
+        position: 0,
+        isPrimaryKey: true,
+        isNullable: false,
+      },
+      {
+        id: "b2",
+        name: "title",
+        dataType: "TEXT",
+        position: 1,
+        isPrimaryKey: false,
+        isNullable: false,
+      },
+    ],
+  };
+
+  let idCounter = 1;
+  const mockIdGen = () => `id-${idCounter++}`;
+
+  describe("generateBridgeClassName", () => {
+    it("genera el nombre PascalCase concatenando origen y destino", () => {
+      assert.equal(generateBridgeClassName("Author", "Book", []), "AuthorBook");
+      assert.equal(
+        generateBridgeClassName("shopping_cart", "line-item", []),
+        "ShoppingCartLineItem"
+      );
+    });
+
+    it("resuelve colisiones de nombre agregando sufijos numéricos de forma insensible a mayúsculas", () => {
+      assert.equal(
+        generateBridgeClassName("Author", "Book", ["authorbook"]),
+        "AuthorBook2"
+      );
+      assert.equal(
+        generateBridgeClassName("Author", "Book", ["AuthorBook", "authorbook2"]),
+        "AuthorBook3"
+      );
+    });
+  });
+
+  describe("calculateBridgeClassPosition", () => {
+    it("calcula el centro horizontal y +180px vertical entre ambas clases", () => {
+      const pos = calculateBridgeClassPosition(
+        { x: 100, y: 200 },
+        { x: 300, y: 400 }
+      );
+      assert.equal(pos.x, 200);
+      assert.equal(pos.y, 480);
+    });
+  });
+
+  describe("generateForeignKeyName", () => {
+    it("genera el nombre snake_case terminado en _id", () => {
+      assert.equal(generateForeignKeyName("Author", []), "author_id");
+      assert.equal(generateForeignKeyName("ShoppingCart", []), "shopping_cart_id");
+    });
+
+    it("resuelve colisiones con atributos existentes", () => {
+      assert.equal(
+        generateForeignKeyName("Author", ["author_id"]),
+        "author_id_2"
+      );
+    });
+  });
+
+  describe("planRelationCreation", () => {
+    it("planifica Asociación N:M con BRIDGE_CLASS, nombre por defecto 'Nueva relación', PK y dos FK", () => {
+      idCounter = 1;
+      const planned = planRelationCreation({
+        relationType: "ASSOCIATION",
+        sourceClass: mockClassA,
+        targetClass: mockClassB,
+        sourceHandle: "RIGHT_CENTER",
+        targetHandle: "LEFT_CENTER",
+        sourceCardinality: "0..*",
+        targetCardinality: "1..*",
+        idGenerator: mockIdGen,
+      });
+
+      assert.equal(planned.relation.name, "Nueva relación"); // US4: N:M tiene nombre por defecto
+      assert.equal(planned.createRelationPayload.name, "Nueva relación");
+      assert.equal(planned.materialization.strategy, "BRIDGE_CLASS");
+      assert.ok(planned.materialization.bridgeClass);
+      assert.equal(planned.materialization.bridgeClass.name, "AuthorBook");
+      assert.equal(planned.materialization.bridgeClass.positionX, 200);
+      assert.equal(planned.materialization.bridgeClass.positionY, 480);
+      assert.equal(planned.materialization.bridgeClass.handle, "TOP_CENTER");
+
+      // PK de la clase puente
+      const pk = planned.materialization.bridgeClass.primaryAttribute;
+      assert.equal(pk.name, "id");
+      assert.equal(pk.position, 0);
+      assert.equal(pk.isPrimaryKey, true);
+
+      // Dos FK
+      const fks = planned.materialization.bridgeClass.foreignAttributes;
+      assert.equal(fks.length, 2);
+      assert.equal(fks[0].referencedClassId, mockClassA.id);
+      assert.equal(fks[0].position, 1);
+      assert.equal(fks[1].referencedClassId, mockClassB.id);
+      assert.equal(fks[1].position, 2);
+
+      // Entidad puente lista para Zustand
+      assert.ok(planned.bridgeClass);
+      assert.equal(planned.bridgeClass.attributes.length, 3);
+    });
+
+    it("planifica Asociación N:M respetando nombre personalizado provisto", () => {
+      idCounter = 1;
+      const planned = planRelationCreation({
+        name: "Escribe",
+        relationType: "ASSOCIATION",
+        sourceClass: mockClassA,
+        targetClass: mockClassB,
+        sourceHandle: "RIGHT_CENTER",
+        targetHandle: "LEFT_CENTER",
+        sourceCardinality: "0..*",
+        targetCardinality: "1..*",
+        idGenerator: mockIdGen,
+      });
+
+      assert.equal(planned.relation.name, "Escribe");
+      assert.equal(planned.createRelationPayload.name, "Escribe");
+    });
+
+    it("planifica Asociación 1:N colocando FK en el lado con máximo * y nombre 'Nueva relación'", () => {
+      idCounter = 1;
+      const planned = planRelationCreation({
+        relationType: "ASSOCIATION",
+        sourceClass: mockClassA,
+        targetClass: mockClassB,
+        sourceHandle: "RIGHT_CENTER",
+        targetHandle: "LEFT_CENTER",
+        sourceCardinality: "1",
+        targetCardinality: "0..*",
+        idGenerator: mockIdGen,
+      });
+
+      assert.equal(planned.relation.name, "Nueva relación");
+      assert.equal(planned.materialization.strategy, "FOREIGN_KEY");
+      assert.equal(planned.materialization.foreignAttributes.length, 1);
+      const fk = planned.materialization.foreignAttributes[0];
+      assert.equal(fk.classId, mockClassB.id); // Lado * (target)
+      assert.equal(fk.referencedClassId, mockClassA.id); // Lado 1 (source)
+      assert.equal(fk.position, 2); // b1 pos 0, b2 pos 1 -> nueva pos 2
+      assert.equal(fk.isNullable, false); // sourceCardinality es "1" -> no nullable
+    });
+
+    it("planifica Asociación 1:1 colocando FK según cantidad de atributos (desempate en destino)", () => {
+      idCounter = 1;
+      // mockClassB tiene 2 atributos, mockClassA tiene 1 -> FK va a B
+      const planned = planRelationCreation({
+        relationType: "ASSOCIATION",
+        sourceClass: mockClassA,
+        targetClass: mockClassB,
+        sourceHandle: "RIGHT_CENTER",
+        targetHandle: "LEFT_CENTER",
+        sourceCardinality: "0..1",
+        targetCardinality: "1",
+        idGenerator: mockIdGen,
+      });
+
+      assert.equal(planned.relation.name, "Nueva relación");
+      assert.equal(planned.materialization.strategy, "FOREIGN_KEY");
+      const fk = planned.materialization.foreignAttributes[0];
+      assert.equal(fk.classId, mockClassB.id);
+      assert.equal(fk.referencedClassId, mockClassA.id);
+      assert.equal(fk.isNullable, true); // sourceCardinality es 0..1
+    });
+
+    it("planifica Agregación con FK nullable en la parte (destino) y fuerza nombre vacío", () => {
+      idCounter = 1;
+      const planned = planRelationCreation({
+        name: "IntentoDeNombre",
+        relationType: "AGGREGATION",
+        sourceClass: mockClassA, // Todo
+        targetClass: mockClassB, // Parte
+        sourceHandle: "BOTTOM_CENTER",
+        targetHandle: "TOP_CENTER",
+        idGenerator: mockIdGen,
+      });
+
+      assert.equal(planned.relation.name, ""); // No asociativa: nombre vacío
+      assert.equal(planned.createRelationPayload.name, "");
+      assert.equal(planned.materialization.strategy, "FOREIGN_KEY");
+      const fk = planned.materialization.foreignAttributes[0];
+      assert.equal(fk.classId, mockClassB.id);
+      assert.equal(fk.referencedClassId, mockClassA.id);
+      assert.equal(fk.isNullable, true);
+    });
+
+    it("planifica Composición con FK no nullable en la parte (destino) y fuerza nombre vacío", () => {
+      idCounter = 1;
+      const planned = planRelationCreation({
+        name: "IntentoDeNombre",
+        relationType: "COMPOSITION",
+        sourceClass: mockClassA, // Todo
+        targetClass: mockClassB, // Parte
+        sourceHandle: "BOTTOM_CENTER",
+        targetHandle: "TOP_CENTER",
+        idGenerator: mockIdGen,
+      });
+
+      assert.equal(planned.relation.name, "");
+      assert.equal(planned.createRelationPayload.name, "");
+      assert.equal(planned.materialization.strategy, "FOREIGN_KEY");
+      const fk = planned.materialization.foreignAttributes[0];
+      assert.equal(fk.classId, mockClassB.id);
+      assert.equal(fk.referencedClassId, mockClassA.id);
+      assert.equal(fk.isNullable, false);
+    });
+
+    it("planifica Generalización con SHARED_PRIMARY_KEY en subclase (origen) y fuerza nombre vacío", () => {
+      idCounter = 1;
+      const planned = planRelationCreation({
+        name: "IntentoDeNombre",
+        relationType: "GENERALIZATION",
+        sourceClass: mockClassA, // Subclase
+        targetClass: mockClassB, // Superclase
+        sourceHandle: "TOP_CENTER",
+        targetHandle: "BOTTOM_CENTER",
+        idGenerator: mockIdGen,
+      });
+
+      assert.equal(planned.relation.name, "");
+      assert.equal(planned.createRelationPayload.name, "");
+      assert.equal(planned.materialization.strategy, "SHARED_PRIMARY_KEY");
+      assert.ok(planned.materialization.sharedPrimaryKey);
+      assert.equal(planned.materialization.sharedPrimaryKey.classId, mockClassA.id);
+      assert.equal(
+        planned.materialization.sharedPrimaryKey.referencedClassId,
+        mockClassB.id
+      );
+      assert.equal(
+        planned.materialization.sharedPrimaryKey.attributeId,
+        mockClassA.attributes[0].id
+      );
+      assert.ok(planned.sharedPrimaryKeyAttribute);
+      assert.equal(planned.sharedPrimaryKeyAttribute.isPrimaryKey, true);
+      assert.equal(planned.sharedPrimaryKeyAttribute.isForeignKey, true);
+    });
+
+    it("planifica Realización con FK no nullable en implementador (origen) y fuerza nombre vacío", () => {
+      idCounter = 1;
+      const planned = planRelationCreation({
+        name: "IntentoDeNombre",
+        relationType: "REALIZATION",
+        sourceClass: mockClassA, // Implementador
+        targetClass: mockClassB, // Contrato
+        sourceHandle: "RIGHT_CENTER",
+        targetHandle: "LEFT_CENTER",
+        idGenerator: mockIdGen,
+      });
+
+      assert.equal(planned.relation.name, "");
+      assert.equal(planned.createRelationPayload.name, "");
+      assert.equal(planned.materialization.strategy, "FOREIGN_KEY");
+      const fk = planned.materialization.foreignAttributes[0];
+      assert.equal(fk.classId, mockClassA.id);
+      assert.equal(fk.referencedClassId, mockClassB.id);
+      assert.equal(fk.isNullable, false);
+    });
+
+    it("planifica Dependencia con FK nullable en cliente (origen) y fuerza nombre vacío", () => {
+      idCounter = 1;
+      const planned = planRelationCreation({
+        name: "IntentoDeNombre",
+        relationType: "DEPENDENCY",
+        sourceClass: mockClassA, // Cliente
+        targetClass: mockClassB, // Proveedor
+        sourceHandle: "RIGHT_CENTER",
+        targetHandle: "LEFT_CENTER",
+        idGenerator: mockIdGen,
+      });
+
+      assert.equal(planned.relation.name, "");
+      assert.equal(planned.createRelationPayload.name, "");
+      assert.equal(planned.materialization.strategy, "FOREIGN_KEY");
+      const fk = planned.materialization.foreignAttributes[0];
+      assert.equal(fk.classId, mockClassA.id);
+      assert.equal(fk.referencedClassId, mockClassB.id);
+      assert.equal(fk.isNullable, true);
+    });
+  });
+});

@@ -1,11 +1,13 @@
 import type {
   Project,
   ProjectCreated,
+  ProjectDetail,
   ProjectList,
   ProjectUpdate,
 } from "../../domain/entities/project.entity";
 import type {
   ProjectCreatedResponse,
+  ProjectDetailResponse,
   ProjectItemResponse,
   ProjectListResponse,
   UpdateProjectRequest,
@@ -23,6 +25,16 @@ export function mapProjectItemToEntity(raw: ProjectItemResponse): Project {
     description: raw.description,
     thumbnailUrl: raw.thumbnail_url,
     isOwner: raw.is_owner,
+  };
+}
+
+export function mapProjectDetailToEntity(raw: ProjectDetailResponse): ProjectDetail {
+  return {
+    id: raw.id,
+    name: raw.name,
+    description: raw.description,
+    thumbnailUrl: raw.thumbnail_url,
+    accessRole: raw.access_role,
   };
 }
 

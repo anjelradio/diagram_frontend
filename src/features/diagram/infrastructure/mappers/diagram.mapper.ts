@@ -8,6 +8,7 @@ import type {
   DiagramClassWithAttributesReadDto,
   DiagramReadDto,
 } from "../schemas/diagram.schemas";
+import { mapDiagramRelationToEntity } from "./diagram-relation.mapper";
 
 /**
  * Mapeadores entre DTOs de transporte HTTP y entidades de dominio para el diagrama.
@@ -23,6 +24,9 @@ export function mapDiagramAttributeToEntity(
     position: dto.position,
     isPrimaryKey: dto.is_primary_key,
     isNullable: dto.is_nullable,
+    isForeignKey: dto.is_foreign_key,
+    referencedClassId: dto.referenced_class_id,
+    relationId: dto.relation_id,
   };
 }
 
@@ -43,5 +47,6 @@ export function mapDiagramSnapshotToEntity(
 ): DiagramSnapshot {
   return {
     classes: dto.classes.map(mapDiagramClassWithAttributesToEntity),
+    relations: (dto.relations || []).map(mapDiagramRelationToEntity),
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   ArrowUpRight,
   Pencil,
@@ -9,7 +9,11 @@ import {
 } from "lucide-react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
-import type { Project } from "@/features/projects/domain/entities/project.entity";
+import {
+  ProjectAccessRole,
+  type ProjectDetail,
+} from "@/features/projects/domain/entities/project.entity";
+import { deriveProjectCanvasCapabilities } from "@/features/projects/domain/services/project-canvas-capabilities";
 import type { ProjectMember } from "@/features/projects/domain/entities/project-member.entity";
 import type { DiagramSnapshot } from "@/features/diagram/domain/entities/diagram-class.entity";
 import {
@@ -21,15 +25,19 @@ import {
 } from "./project-canvas-toolbar";
 import { DiagramCanvasView } from "@/features/diagram/presentation/components/elements/diagram-canvas/diagram-canvas-view";
 import { DiagramSyncBadge } from "@/features/diagram/presentation/components/elements/diagram-canvas/diagram-sync-badge";
+import { RelationGuidancePill } from "@/features/diagram/presentation/components/elements/diagram-canvas/relations/relation-guidance-pill";
 import { ProjectActionsMenu } from "./project-actions-menu";
 import { ProjectCommandDialog } from "./project-command-dialog";
 import { ProjectSharePopover } from "./project-share-popover";
 import { ProjectMembersPopover } from "./project-members-popover";
 import { ProjectInformationPopover } from "./project-information-dialog";
 import { DeleteProjectDialog } from "./delete-project-dialog";
+import { useProjectAccessRevalidation } from "@/features/projects/presentation/hooks/use-project-access-revalidation";
+import { useAppStore } from "@/features/shared/presentation/store/app-store";
+import { useCollaborationSocket } from "@/features/diagram/presentation/hooks/use-collaboration-socket";
 
 type ProjectCanvasViewProps = {
-  project: Project;
+  project: ProjectDetail;
   initialMembers?: ProjectMember[];
   initialSnapshot?: DiagramSnapshot;
   viewerId: string;
@@ -38,7 +46,7 @@ type ProjectCanvasViewProps = {
 /**
  * Vista principal e integradora del lienzo de proyecto (Stitch Canvas).
  * Coordina React Flow, la barra vertical de herramientas, los controles de navegación,
- * atajos de teclado globales y las operaciones administrativas condicionadas al propietario.
+ * atajos de teclado globales y las operaciones administrativas condicionadas por la matriz de capacidades.
  */
 export function ProjectCanvasView({
   project,
@@ -46,11 +54,40 @@ export function ProjectCanvasView({
   initialSnapshot,
   viewerId,
 }: ProjectCanvasViewProps) {
-  const [currentProject, setCurrentProject] = useState<Project>(project);
-  const [activeTool, setActiveTool] = useState<CanvasTool>("cursor");
+  const [currentProject, setCurrentProject] = useState<ProjectDetail>(project);
   const [isTemporaryHand, setIsTemporaryHand] = useState(false);
 
-  const canEdit = true;
+  const capabilities = deriveProjectCanvasCapabilities(currentProject.accessRole);
+  const canEdit = capabilities.canEditDiagram;
+
+  useCollaborationSocket({
+    projectId: currentProject.id,
+    role: currentProject.accessRole as "OWNER" | "EDITOR" | "READER",
+    enabled: Boolean(viewerId),
+  });
+
+  // Revalidación reactiva ante cambios de foco/visibilidad y 403/404
+  useProjectAccessRevalidation({
+    projectId: currentProject.id,
+    viewerId,
+    currentRole: currentProject.accessRole,
+    onAccessUpdated: (updated) => setCurrentProject(updated),
+  });
+
+  // Sincronizar activeTool directamente desde el store de diagrama
+  const activeTool = useAppStore((s) => s.activeTool);
+  const setActiveStoreTool = useAppStore((s) => s.setActiveTool);
+  const cancelRelationCreation = useAppStore((s) => s.cancelRelationCreation);
+
+  const handleSelectTool = useCallback(
+    (tool: CanvasTool) => {
+      setActiveStoreTool(tool);
+      if (tool !== "relation") {
+        cancelRelationCreation();
+      }
+    },
+    [setActiveStoreTool, cancelRelationCreation]
+  );
 
   // Estados de modales y diálogos
   const [isCommandOpen, setIsCommandOpen] = useState(false);
@@ -84,6 +121,20 @@ export function ProjectCanvasView({
       // Si el foco está en un campo o diálogo, omitir los atajos de herramientas
       if (isEditable(e.target)) return;
 
+      // Escape: Cancelar draft de conexión o desactivar herramienta de relación
+      if (e.key === "Escape") {
+        const store = useAppStore.getState();
+        if (
+          store.relationDraftSource ||
+          store.activeTool === "relation" ||
+          store.activeRelationPreset ||
+          store.isRelationPickerOpen
+        ) {
+          store.cancelRelationCreation();
+          return;
+        }
+      }
+
       // Espacio mantenido: Paneo temporal (Mano)
       if (e.key === " " || e.code === "Space") {
         e.preventDefault();
@@ -93,26 +144,39 @@ export function ProjectCanvasView({
 
       // V o B: Selección de herramienta Puntero
       if (e.key.toLowerCase() === "v" || e.key.toLowerCase() === "b") {
-        setActiveTool("cursor");
+        if (canEdit) {
+          handleSelectTool("cursor");
+        }
         return;
       }
 
       // M: Selección de herramienta Marco de selección
       if (e.key.toLowerCase() === "m") {
-        setActiveTool("select");
+        if (canEdit) {
+          handleSelectTool("select");
+        }
         return;
       }
 
       // H: Selección de herramienta Mano persistente
       if (e.key.toLowerCase() === "h") {
-        setActiveTool("hand");
+        handleSelectTool("hand");
         return;
       }
 
       // C: Selección de herramienta Crear clase UML (condicionada a canEdit)
       if (e.key.toLowerCase() === "c") {
         if (canEdit) {
-          setActiveTool("create-class");
+          handleSelectTool("create-class");
+        }
+        return;
+      }
+
+      // R: Alternar catálogo / herramienta de relaciones UML (condicionada a canEdit)
+      if (e.key.toLowerCase() === "r") {
+        if (canEdit) {
+          const store = useAppStore.getState();
+          store.setRelationPickerOpen(!store.isRelationPickerOpen);
         }
         return;
       }
@@ -131,7 +195,7 @@ export function ProjectCanvasView({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [canEdit]);
+  }, [canEdit, handleSelectTool]);
 
   return (
     <ReactFlowProvider>
@@ -150,14 +214,17 @@ export function ProjectCanvasView({
         {/* Izquierda: Menú principal y título del proyecto */}
         <div className="flex items-center space-x-3 pointer-events-auto">
           <ProjectActionsMenu
-            isOwner={currentProject.isOwner}
+            capabilities={capabilities}
+            isOwner={currentProject.accessRole === ProjectAccessRole.OWNER}
             onOpenCommands={() => setIsCommandOpen(true)}
             onOpenDelete={
-              currentProject.isOwner ? () => setIsDeleteOpen(true) : undefined
+              capabilities.canDuplicateOrDeleteProject
+                ? () => setIsDeleteOpen(true)
+                : undefined
             }
           />
 
-          {currentProject.isOwner ? (
+          {capabilities.canEditProjectDetails ? (
             <ProjectInformationPopover
               open={isEditOpen}
               onOpenChange={setIsEditOpen}
@@ -201,46 +268,43 @@ export function ProjectCanvasView({
         {/* Derecha: Acciones, Compartir y Colaboradores */}
         <div className="flex items-center space-x-2.5 pointer-events-auto">
           {/* Botones de acción futura */}
-          <button
-            type="button"
-            onClick={() =>
-              appToast.info("La generación de Backend estará disponible próximamente.")
-            }
-            className="hidden sm:flex items-center space-x-1.5 bg-[#191a1d] border border-white/10 text-white hover:bg-white/10 px-3.5 py-2 rounded-full text-xs font-medium shadow-lg transition active:scale-95 cursor-pointer"
-            title="Generar Backend"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Generar Backend</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              appToast.info("La exportación de diagramas estará disponible próximamente.")
-            }
-            className="hidden sm:flex items-center space-x-1.5 bg-[#191a1d] border border-white/10 text-white hover:bg-white/10 px-3.5 py-2 rounded-full text-xs font-medium shadow-lg transition active:scale-95 cursor-pointer"
-            title="Exportar"
-          >
-            <ArrowUpRight className="w-3.5 h-3.5 text-white" />
-            <span>Exportar</span>
-          </button>
-
-          {/* Opciones exclusivas del propietario */}
-          {currentProject.isOwner ? (
+          {capabilities.canExportOrGenerate && (
             <>
-              <ProjectSharePopover projectId={currentProject.id} />
-              <ProjectMembersPopover
-                projectId={currentProject.id}
-                initialMembers={initialMembers}
-              />
+              <button
+                type="button"
+                onClick={() =>
+                  appToast.info("La generación de Backend estará disponible próximamente.")
+                }
+                className="hidden sm:flex items-center space-x-1.5 bg-[#191a1d] border border-white/10 text-white hover:bg-white/10 px-3.5 py-2 rounded-full text-xs font-medium shadow-lg transition active:scale-95 cursor-pointer"
+                title="Generar Backend"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Generar Backend</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  appToast.info("La exportación de diagramas estará disponible próximamente.")
+                }
+                className="hidden sm:flex items-center space-x-1.5 bg-[#191a1d] border border-white/10 text-white hover:bg-white/10 px-3.5 py-2 rounded-full text-xs font-medium shadow-lg transition active:scale-95 cursor-pointer"
+                title="Exportar"
+              >
+                <ArrowUpRight className="w-3.5 h-3.5 text-white" />
+                <span>Exportar</span>
+              </button>
             </>
-          ) : (
-            <div className="flex items-center bg-[#191a1d] border border-white/10 rounded-full px-3 py-1 shadow-lg">
-              <span className="text-[10px] font-mono font-medium text-slate-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">
-                Colaborador
-              </span>
-            </div>
           )}
+
+          {capabilities.canShareInvitation && (
+            <ProjectSharePopover projectId={currentProject.id} />
+          )}
+
+          <ProjectMembersPopover
+            projectId={currentProject.id}
+            initialMembers={initialMembers}
+            capabilities={capabilities}
+          />
         </div>
       </header>
 
@@ -249,7 +313,7 @@ export function ProjectCanvasView({
         activeTool={activeTool}
         isTemporaryHand={isTemporaryHand}
         canEdit={canEdit}
-        onSelectTool={setActiveTool}
+        onSelectTool={handleSelectTool}
       />
 
       {/* Lienzo interactivo React Flow con soporte de clases de diagrama */}
@@ -257,37 +321,48 @@ export function ProjectCanvasView({
         projectId={currentProject.id}
         viewerId={viewerId}
         initialSnapshot={initialSnapshot}
+        canEdit={canEdit}
         activeTool={activeTool}
         isTemporaryHand={isTemporaryHand}
-        onClassCreated={() => setActiveTool("cursor")}
+        onClassCreated={() => handleSelectTool("cursor")}
       />
 
-      {/* Pie de controles flotantes */}
+      {/* Pie de controles flotantes con distribución estable en 3 columnas */}
       <footer className="fixed bottom-6 left-0 right-0 z-30 px-5 flex items-center justify-between pointer-events-none">
         {/* Izquierda: Registro de agente */}
-        <button
-          type="button"
-          onClick={() =>
-            appToast.info("El registro de actividad estará disponible próximamente.")
-          }
-          className="pointer-events-auto flex items-center space-x-2 bg-[#191a1d] text-white border border-white/10 py-2 px-4 rounded-full shadow-xl hover:bg-white/10 transition text-xs font-medium active:scale-95 cursor-pointer"
-        >
-          <Terminal className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Registro de agente</span>
-        </button>
+        <div className="flex-1 flex justify-start">
+          <button
+            type="button"
+            onClick={() =>
+              appToast.info("El registro de actividad estará disponible próximamente.")
+            }
+            className="pointer-events-auto flex items-center space-x-2 bg-[#191a1d] text-white border border-white/10 py-2 px-4 rounded-full shadow-xl hover:bg-white/10 transition text-xs font-medium active:scale-95 cursor-pointer"
+          >
+            <Terminal className="w-3.5 h-3.5 text-indigo-400" />
+            <span>Registro de agente</span>
+          </button>
+        </div>
+
+        {/* Centro: Píldora de orientación contextual */}
+        <div className="flex-1 flex justify-center pointer-events-none">
+          <RelationGuidancePill />
+        </div>
 
         {/* Derecha: Deshacer / Rehacer y Porcentaje de Zoom */}
-        <ProjectCanvasBottomControls />
+        <div className="flex-1 flex justify-end">
+          <ProjectCanvasBottomControls />
+        </div>
       </footer>
 
       {/* Diálogo de atajos de teclado (⌘K) */}
       <ProjectCommandDialog
         open={isCommandOpen}
         onOpenChange={setIsCommandOpen}
+        capabilities={capabilities}
       />
 
       {/* Diálogos exclusivos del propietario */}
-      {currentProject.isOwner && (
+      {capabilities.canDuplicateOrDeleteProject && (
         <DeleteProjectDialog
           open={isDeleteOpen}
           onOpenChange={setIsDeleteOpen}

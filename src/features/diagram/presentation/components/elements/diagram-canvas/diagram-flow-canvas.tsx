@@ -1,18 +1,27 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useCallback, useMemo, type ReactNode } from "react";
 import {
   Background,
   BackgroundVariant,
+  ConnectionMode,
+  type Connection,
+  type Edge,
   PanOnScrollMode,
   ReactFlow,
   useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { cn } from "@/lib/utils";
+import { appToast } from "@/features/shared/presentation/components/notifications/toast";
 import { PROJECT_CANVAS_CONFIG } from "@/features/projects/presentation/constants/canvas.config";
 import { InteractiveCanvasGlow } from "@/features/projects/presentation/components/elements/project-canvas/interactive-canvas-glow";
 import { DiagramClassNode } from "./diagram-class-node";
+import { DiagramRelationEdge } from "./relations/diagram-relation-edge";
+import { ManyToManyRelationEdge } from "./relations/many-to-many-relation-edge";
+import { UmlRelationMarkers } from "./relations/uml-relation-markers";
+import { convertRelationsToEdges } from "./relations/diagram-relation-edge.utils";
+import { planRelationCreation } from "@/features/diagram/domain/services/diagram-relation-planner";
 import {
   useAppStore,
 } from "@/features/shared/presentation/store/app-store";
@@ -20,12 +29,29 @@ import type { DiagramClassNodeType } from "@/features/diagram/presentation/store
 import { diagramOperationQueueRepositoryImpl } from "@/features/diagram/infrastructure/storage/diagram-operation-queue.repository";
 import type { DiagramClassWithAttributes } from "@/features/diagram/domain/entities/diagram-class.entity";
 import type { CreateClassPayload } from "@/features/diagram/domain/entities/diagram-operation.entity";
+import type {
+  DiagramCardinality,
+  DiagramRelationHandle,
+  DiagramRelationType,
+} from "@/features/diagram/domain/entities/diagram-relation.entity";
+import { sendCollaborationMessage } from "@/features/diagram/infrastructure/realtime/collaboration-socket";
 
-export type CanvasTool = "cursor" | "select" | "hand" | "create-class";
+export type CanvasTool =
+  | "cursor"
+  | "select"
+  | "hand"
+  | "create-class"
+  | "relation";
 
 const nodeTypes = {
   diagramClass: DiagramClassNode,
 };
+
+const edgeTypes = {
+  diagramRelation: DiagramRelationEdge,
+  manyToManyRelation: ManyToManyRelationEdge,
+};
+
 
 type DiagramFlowCanvasProps = {
   activeTool: CanvasTool;
@@ -54,6 +80,24 @@ export function DiagramFlowCanvas({
   );
   const setSelectedAttribute = useAppStore((s) => s.setSelectedAttribute);
   const setActiveTool = useAppStore((s) => s.setActiveTool);
+  const relations = useAppStore((s) => s.relations);
+  const selectedRelationId = useAppStore((s) => s.selectedRelationId);
+  const setSelectedRelationId = useAppStore((s) => s.setSelectedRelationId);
+  const removeRelationOptimistic = useAppStore(
+    (s) => s.removeRelationOptimistic
+  );
+  const addOptimisticRelationAggregate = useAppStore(
+    (s) => s.addOptimisticRelationAggregate
+  );
+  const selectRelationPreset = useAppStore((s) => s.selectRelationPreset);
+  const setRelationDraftSource = useAppStore((s) => s.setRelationDraftSource);
+  const canEdit = useAppStore((s) => s.canEdit);
+  const classLocks = useAppStore((s) => s.classLocks);
+
+  const edges = useMemo(
+    () => convertRelationsToEdges(relations, selectedRelationId),
+    [relations, selectedRelationId]
+  );
 
   useEffect(() => {
     setActiveTool(activeTool);
@@ -91,14 +135,222 @@ export function DiagramFlowCanvas({
     return () => clearTimeout(emptyTimer);
   }, [nodes.length, fitView, setCenter]);
 
+  const activeRelationPreset = useAppStore((s) => s.activeRelationPreset);
+  const isRelationActive =
+    !isTemporaryHand &&
+    (activeTool === "relation" || activeRelationPreset !== null);
+
   const isHandActive = isTemporaryHand || activeTool === "hand";
   const isSelectActive = !isTemporaryHand && activeTool === "select";
   const isCreateClassActive = !isTemporaryHand && activeTool === "create-class";
 
+  // Manejo de inicio de conexión desde un handle
+  const handleConnectStart = useCallback(
+    (
+      _event: MouseEvent | TouchEvent,
+      params: { nodeId?: string | null; handleId?: string | null }
+    ) => {
+      if (params.nodeId && params.handleId) {
+        const lock = classLocks[params.nodeId];
+        if (lock && lock.userId !== viewerId) return;
+        sendCollaborationMessage({ type: "class_lock_acquire", class_id: params.nodeId });
+        useAppStore.getState().setRelationDraftSource({
+          classId: params.nodeId,
+          handle: params.handleId as DiagramRelationHandle,
+        });
+      }
+    },
+    [classLocks, viewerId]
+  );
+
+  // Limpieza de borrador si no se finaliza la conexión
+  const handleConnectEnd = useCallback(() => {
+    setTimeout(() => {
+      const state = useAppStore.getState();
+      if (state.relationDraftSource) {
+        state.setRelationDraftSource(null);
+      }
+    }, 50);
+  }, []);
+
+  // Validación de arista: rechazar autorrelación en la misma clase
+  const isValidConnection = useCallback((connection: Edge | Connection) => {
+    if (!connection.source || !connection.target) return false;
+    if (connection.source === connection.target) {
+      appToast.error("Esta primera versión solo conecta clases distintas.");
+      return false;
+    }
+    return true;
+  }, []);
+
+  // Manejo de conexión completada entre handles de clases distintas
+  const handleConnect = useCallback(
+    async (connection: Connection) => {
+      if (!canEdit || !projectId || !viewerId) return;
+      if (!connection.source || !connection.target) return;
+
+      if (connection.source === connection.target) {
+        appToast.error("Esta primera versión solo conecta clases distintas.");
+        return;
+      }
+
+      const state = useAppStore.getState();
+      const preset = state.activeRelationPreset;
+      const custom = state.customRelationDraft;
+
+      let relationType: DiagramRelationType;
+      let sourceCardinality: DiagramCardinality | null = null;
+      let targetCardinality: DiagramCardinality | null = null;
+
+      if (preset) {
+        relationType = preset.relationType;
+        sourceCardinality = preset.sourceCardinality;
+        targetCardinality = preset.targetCardinality;
+      } else if (custom) {
+        relationType = "ASSOCIATION";
+        sourceCardinality = custom.sourceCardinality;
+        targetCardinality = custom.targetCardinality;
+      } else {
+        appToast.error("Selecciona un tipo de relación antes de conectar.");
+        return;
+      }
+
+      // Invariante: una subclase solo puede ser origen de una GENERALIZATION activa
+      if (relationType === "GENERALIZATION") {
+        const alreadySubclass = state.relations.some(
+          (r) =>
+            r.relationType === "GENERALIZATION" &&
+            r.source.classId === connection.source
+        );
+        if (alreadySubclass) {
+          appToast.error(
+            "Una subclase solo puede tener una relación de generalización en esta versión."
+          );
+          return;
+        }
+      }
+
+      const sourceNode = state.nodes.find((n) => n.id === connection.source);
+      const targetNode = state.nodes.find((n) => n.id === connection.target);
+
+      if (!sourceNode || !targetNode) return;
+
+      const sourceClass: DiagramClassWithAttributes = {
+        id: sourceNode.id,
+        name: sourceNode.data.name,
+        positionX: sourceNode.position.x,
+        positionY: sourceNode.position.y,
+        attributes: sourceNode.data.attributes || [],
+      };
+
+      const targetClass: DiagramClassWithAttributes = {
+        id: targetNode.id,
+        name: targetNode.data.name,
+        positionX: targetNode.position.x,
+        positionY: targetNode.position.y,
+        attributes: targetNode.data.attributes || [],
+      };
+
+      const existingClasses: DiagramClassWithAttributes[] = state.nodes.map(
+        (n) => ({
+          id: n.id,
+          name: n.data.name,
+          positionX: n.position.x,
+          positionY: n.position.y,
+          attributes: n.data.attributes || [],
+        })
+      );
+
+      const sourceHandle = (connection.sourceHandle ||
+        "RIGHT_CENTER") as DiagramRelationHandle;
+      const targetHandle = (connection.targetHandle ||
+        "LEFT_CENTER") as DiagramRelationHandle;
+
+      const aggregate = planRelationCreation({
+        sourceClass,
+        targetClass,
+        relationType,
+        sourceCardinality,
+        targetCardinality,
+        sourceHandle,
+        targetHandle,
+        existingClasses,
+      });
+
+      try {
+        // 1. Encolar durablemente en IndexedDB antes de proyectar
+        await diagramOperationQueueRepositoryImpl.enqueue({
+          operationId: crypto.randomUUID(),
+          viewerId,
+          projectId,
+          kind: "CREATE_RELATION",
+          classId: aggregate.relation.source.classId,
+          payload: {
+            id: aggregate.relation.id,
+            name: aggregate.relation.name,
+            relationType: aggregate.relation.relationType,
+            source: aggregate.relation.source,
+            target: aggregate.relation.target,
+            materialization: aggregate.materialization,
+          },
+          createdAt: new Date().toISOString(),
+          attempts: 0,
+          state: "pending",
+        });
+
+        // 2. Proyección optimista atómica en el store
+        addOptimisticRelationAggregate(aggregate);
+
+        // 3. Disparar sincronizador
+        window.dispatchEvent(new CustomEvent("diagram:process-queue"));
+
+        // 4. Retorno automático a herramienta cursor
+        selectRelationPreset(null);
+        setRelationDraftSource(null);
+        setActiveTool("cursor");
+        useAppStore.getState().setRelationPickerOpen(false);
+      } catch (err) {
+        console.error("Error al crear relación:", err);
+        appToast.error("Error al crear la relación.");
+      }
+    },
+    [
+      canEdit,
+      projectId,
+      viewerId,
+      addOptimisticRelationAggregate,
+      selectRelationPreset,
+      setRelationDraftSource,
+      setActiveTool,
+    ]
+  );
+
+
+  // Cancelación de draft de relación mediante tecla Escape
+  useEffect(() => {
+    const handleEscapeKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        const store = useAppStore.getState();
+        if (
+          store.relationDraftSource ||
+          store.activeTool === "relation" ||
+          store.isRelationPickerOpen
+        ) {
+          e.preventDefault();
+          store.cancelRelationCreation();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleEscapeKeyDown);
+    return () => window.removeEventListener("keydown", handleEscapeKeyDown);
+  }, []);
+
   // Manejo de clic en el lienzo para creación de clase con PK atómica
   const handlePaneClick = async (event: React.MouseEvent) => {
     setSelectedAttribute(null);
-    if (!isCreateClassActive || !projectId || !viewerId) return;
+    setSelectedRelationId(null);
+    if (!canEdit || !isCreateClassActive || !projectId || !viewerId) return;
 
     const position = screenToFlowPosition({
       x: event.clientX,
@@ -173,6 +425,8 @@ export function DiagramFlowCanvas({
     node: DiagramClassNodeType
   ) => {
     if (!projectId || !viewerId) return;
+    const lock = classLocks[node.id];
+    if (lock && lock.userId !== viewerId) return;
 
     updateClassPositionOptimistic(node.id, {
       x: node.position.x,
@@ -195,6 +449,13 @@ export function DiagramFlowCanvas({
         state: "pending",
       });
       window.dispatchEvent(new CustomEvent("diagram:process-queue"));
+      sendCollaborationMessage({
+        type: "class_drag",
+        class_id: node.id,
+        x: node.position.x,
+        y: node.position.y,
+      });
+      sendCollaborationMessage({ type: "class_lock_release", class_id: node.id });
     } catch (err) {
       console.error("Error moviendo clase:", err);
     }
@@ -207,6 +468,7 @@ export function DiagramFlowCanvas({
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
       if (!projectId || !viewerId) return;
+      if (!canEdit) return;
       if (e.key !== "Delete" && e.key !== "Backspace") return;
 
       const target = e.target as HTMLElement | null;
@@ -234,8 +496,8 @@ export function DiagramFlowCanvas({
         );
 
         if (targetAttr) {
-          if (targetAttr.isPrimaryKey) {
-            // La llave primaria es inmutable y no se elimina
+          if (targetAttr.isPrimaryKey || targetAttr.isForeignKey) {
+            // La llave primaria o foránea derivada es inmutable y no se elimina manualmente
             return;
           }
 
@@ -270,34 +532,103 @@ export function DiagramFlowCanvas({
         }
       }
 
-      // Prioridad 2: Clases seleccionadas bajo la herramienta 'select'
-      if (activeTool !== "select") return;
+      // Prioridad 2: Si hay una relación seleccionada, eliminarla
+      const selectedRelationId = useAppStore.getState().selectedRelationId;
+      if (selectedRelationId) {
+        e.preventDefault();
 
-      const selectedNodes = useAppStore
-        .getState()
-        .nodes.filter((n) => n.selected);
-      if (selectedNodes.length === 0) return;
+        // Eliminación optimista en el cliente (incluye cascada de puente y FK)
+        removeRelationOptimistic(selectedRelationId);
 
-      e.preventDefault();
-
-      const selectedIds = selectedNodes.map((n) => n.id);
-      removeNodesOptimistic(selectedIds);
-
-      for (const node of selectedNodes) {
         try {
           await diagramOperationQueueRepositoryImpl.enqueue({
             operationId: crypto.randomUUID(),
             viewerId,
             projectId,
-            kind: "DELETE",
-            classId: node.id,
-            payload: {},
+            kind: "DELETE_RELATION",
+            relationId: selectedRelationId,
+            payload: {
+              relationId: selectedRelationId,
+            },
+            createdAt: new Date().toISOString(),
+            attempts: 0,
+            state: "pending",
+          });
+          window.dispatchEvent(new CustomEvent("diagram:process-queue"));
+        } catch (err) {
+          console.error("Error al encolar eliminación de relación:", err);
+        }
+        return;
+      }
+
+      // Prioridad 3: Clases seleccionadas
+      const state = useAppStore.getState();
+      const selectedNodes = state.nodes.filter((n) => n.selected);
+      if (selectedNodes.length === 0) return;
+
+      e.preventDefault();
+
+      // Separar nodos puente (redirigir al agregado N:M) de nodos normales
+      const bridgeRelationsToDelete = new Set<string>();
+      const regularNodesToDelete: typeof selectedNodes = [];
+
+      for (const node of selectedNodes) {
+        const parentRelation = state.relations.find(
+          (r) => r.bridge?.classId === node.id
+        );
+        if (parentRelation) {
+          bridgeRelationsToDelete.add(parentRelation.id);
+        } else {
+          regularNodesToDelete.push(node);
+        }
+      }
+
+      // 1. Eliminar relaciones N:M cuyos puentes fueron seleccionados
+      for (const relId of bridgeRelationsToDelete) {
+        removeRelationOptimistic(relId);
+        try {
+          await diagramOperationQueueRepositoryImpl.enqueue({
+            operationId: crypto.randomUUID(),
+            viewerId,
+            projectId,
+            kind: "DELETE_RELATION",
+            relationId: relId,
+            payload: {
+              relationId: relId,
+            },
             createdAt: new Date().toISOString(),
             attempts: 0,
             state: "pending",
           });
         } catch (err) {
-          console.error("Error al encolar eliminación:", err);
+          console.error(
+            "Error al encolar eliminación de relación puente:",
+            err
+          );
+        }
+      }
+
+      // 2. Eliminar clases normales seleccionadas
+      if (regularNodesToDelete.length > 0) {
+        const selectedIds = regularNodesToDelete.map((n) => n.id);
+        removeNodesOptimistic(selectedIds);
+
+        for (const node of regularNodesToDelete) {
+          try {
+            await diagramOperationQueueRepositoryImpl.enqueue({
+              operationId: crypto.randomUUID(),
+              viewerId,
+              projectId,
+              kind: "DELETE",
+              classId: node.id,
+              payload: {},
+              createdAt: new Date().toISOString(),
+              attempts: 0,
+              state: "pending",
+            });
+          } catch (err) {
+            console.error("Error al encolar eliminación de clase:", err);
+          }
         }
       }
 
@@ -307,10 +638,12 @@ export function DiagramFlowCanvas({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
+    canEdit,
     projectId,
     viewerId,
     activeTool,
     removeNodesOptimistic,
+    removeRelationOptimistic,
     removeAttributeOptimistic,
   ]);
 
@@ -318,18 +651,29 @@ export function DiagramFlowCanvas({
     <div
       className={cn(
         "w-full h-full relative overflow-hidden bg-[#212224]",
-        isCreateClassActive && "cursor-crosshair",
-        isHandActive && "cursor-grab active:cursor-grabbing",
-        isSelectActive && "cursor-default",
-        !isHandActive && !isSelectActive && !isCreateClassActive && "cursor-default"
+        !canEdit && "cursor-grab active:cursor-grabbing",
+        canEdit && (isCreateClassActive || isRelationActive) && "cursor-crosshair",
+        canEdit && isHandActive && "cursor-grab active:cursor-grabbing",
+        canEdit && isSelectActive && "cursor-default",
+        canEdit &&
+          !isHandActive &&
+          !isSelectActive &&
+          !isCreateClassActive &&
+          !isRelationActive &&
+          "cursor-default"
       )}
     >
       <ReactFlow<DiagramClassNodeType>
         nodes={nodes}
         nodeTypes={nodeTypes}
+        edges={edges}
+        edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onNodeDragStop={handleNodeDragStop}
         onPaneClick={handlePaneClick}
+        onConnect={handleConnect}
+        onEdgeClick={canEdit ? (_event, edge) => setSelectedRelationId(edge.id) : undefined}
+        onNodeClick={canEdit ? () => setSelectedRelationId(null) : undefined}
         minZoom={PROJECT_CANVAS_CONFIG.zoom.min}
         maxZoom={PROJECT_CANVAS_CONFIG.zoom.max}
         defaultViewport={PROJECT_CANVAS_CONFIG.viewport.default}
@@ -338,10 +682,10 @@ export function DiagramFlowCanvas({
         zoomActivationKeyCode={
           PROJECT_CANVAS_CONFIG.shortcuts.zoomActivationKeyCode as unknown as string[]
         }
-        panOnDrag={isHandActive ? [0, 1, 2] : false}
-        selectionOnDrag={isSelectActive}
-        elementsSelectable={!isHandActive && !isCreateClassActive}
-        nodesDraggable={!isHandActive && !isCreateClassActive}
+        panOnDrag={!canEdit ? [0, 1, 2] : isHandActive ? [0, 1, 2] : false}
+        selectionOnDrag={canEdit && isSelectActive}
+        elementsSelectable={canEdit && !isHandActive && !isCreateClassActive}
+        nodesDraggable={canEdit && !isHandActive && !isCreateClassActive}
         panOnScroll={PROJECT_CANVAS_CONFIG.navigation.panOnScroll}
         panOnScrollMode={
           PROJECT_CANVAS_CONFIG.navigation.panOnScrollMode as PanOnScrollMode
@@ -349,9 +693,13 @@ export function DiagramFlowCanvas({
         panOnScrollSpeed={PROJECT_CANVAS_CONFIG.navigation.panOnScrollSpeed}
         zoomOnScroll={true}
         zoomOnPinch={true}
-        nodesConnectable={false}
-        nodesFocusable={true}
-        edgesFocusable={false}
+        connectionMode={ConnectionMode.Loose}
+        nodesConnectable={canEdit && isRelationActive}
+        onConnectStart={handleConnectStart}
+        onConnectEnd={handleConnectEnd}
+        isValidConnection={isValidConnection}
+        nodesFocusable={canEdit}
+        edgesFocusable={canEdit}
         deleteKeyCode={null}
         selectionKeyCode={null}
         className="transition-colors duration-200"
@@ -365,8 +713,10 @@ export function DiagramFlowCanvas({
           bgColor={PROJECT_CANVAS_CONFIG.grid.bgColor}
         />
         <InteractiveCanvasGlow />
+        <UmlRelationMarkers />
         {children}
       </ReactFlow>
+
     </div>
   );
 }

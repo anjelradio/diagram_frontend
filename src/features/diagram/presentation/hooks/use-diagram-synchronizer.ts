@@ -11,9 +11,13 @@ import type {
   RenameClassPayload,
   RepositionAttributePayload,
   UpdateAttributePayload,
+  CreateRelationPayload,
+  RenameRelationPayload,
+  DeleteRelationPayload,
 } from "../../domain/entities/diagram-operation.entity";
 import { diagramClassRepositoryImpl } from "../../infrastructure/repositories/diagram-class.repository";
 import { diagramAttributeRepositoryImpl } from "../../infrastructure/repositories/diagram-attribute.repository";
+import { diagramRelationRepositoryImpl } from "../../infrastructure/repositories/diagram-relation.repository";
 import { diagramOperationQueueRepositoryImpl } from "../../infrastructure/storage/diagram-operation-queue.repository";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
 
@@ -23,12 +27,14 @@ type UseDiagramSynchronizerOptions = {
   projectId: string;
   viewerId: string;
   initialSnapshot?: DiagramSnapshot;
+  canEdit?: boolean;
 };
 
 export function useDiagramSynchronizer({
   projectId,
   viewerId,
   initialSnapshot,
+  canEdit = false,
 }: UseDiagramSynchronizerOptions) {
   const setDiagramContext = useAppStore((s) => s.setDiagramContext);
   const hydrateSnapshot = useAppStore((s) => s.hydrateSnapshot);
@@ -42,6 +48,7 @@ export function useDiagramSynchronizer({
     async (retryBlocked = false) => {
       if (isProcessingRef.current) return;
       if (!projectId || !viewerId) return;
+      if (!canEdit) return;
 
       if (retryBlocked) {
         await diagramOperationQueueRepositoryImpl.resetBlockedOperations(
@@ -79,28 +86,33 @@ export function useDiagramSynchronizer({
         try {
           switch (nextOp.kind) {
             case "CREATE":
+            case "CREATE_CLASS":
               result = await diagramClassRepositoryImpl.createClass(
                 projectId,
                 nextOp.payload as CreateClassPayload
               );
               break;
             case "RENAME":
+            case "RENAME_CLASS":
               result = await diagramClassRepositoryImpl.renameClass(
                 nextOp.classId,
                 nextOp.payload as RenameClassPayload
               );
               break;
             case "MOVE":
+            case "MOVE_CLASS":
               result = await diagramClassRepositoryImpl.moveClass(
                 nextOp.classId,
                 nextOp.payload as MoveClassPayload
               );
               break;
             case "DELETE":
+            case "DELETE_CLASS":
               result = await diagramClassRepositoryImpl.deleteClass(
                 nextOp.classId
               );
               break;
+
             case "CREATE_ATTRIBUTE": {
               const payload = nextOp.payload as CreateAttributePayload;
               result = await diagramAttributeRepositoryImpl.createAttribute(
@@ -142,6 +154,33 @@ export function useDiagramSynchronizer({
               );
               break;
             }
+
+            case "CREATE_RELATION": {
+              const payload = nextOp.payload as CreateRelationPayload;
+              result = await diagramRelationRepositoryImpl.createRelation(
+                projectId,
+                payload
+              );
+              break;
+            }
+            case "RENAME_RELATION": {
+              const payload = nextOp.payload as RenameRelationPayload;
+              const relationId = nextOp.relationId || payload.relationId;
+              result = await diagramRelationRepositoryImpl.renameRelation(
+                relationId,
+                payload
+              );
+              break;
+            }
+            case "DELETE_RELATION": {
+              const payload = nextOp.payload as DeleteRelationPayload;
+              const relationId = nextOp.relationId || payload.relationId;
+              result = await diagramRelationRepositoryImpl.deleteRelation(
+                relationId
+              );
+              break;
+            }
+
             default:
               result = { ok: true };
               break;
@@ -169,6 +208,10 @@ export function useDiagramSynchronizer({
             result.errors?.[0] || "Operación rechazada por el servidor.";
           setSyncStatus("blocked", errorMsg);
           appToast.error("Error de sincronización", errorMsg);
+
+          if (statusCode === 403 || statusCode === 404) {
+            window.dispatchEvent(new CustomEvent("diagram:access-revoked"));
+          }
           break;
         } else {
           nextOp.attempts = (nextOp.attempts || 0) + 1;
@@ -179,7 +222,8 @@ export function useDiagramSynchronizer({
           );
           nextOp.nextAttemptAt = new Date(Date.now() + delayMs).toISOString();
           await diagramOperationQueueRepositoryImpl.update(nextOp);
-          setSyncStatus("pending", null);
+          const retryMsg = `Reintentando en ${Math.ceil(delayMs / 1000)}s...`;
+          setSyncStatus("pending", retryMsg);
 
           if (retryTimeoutRef.current) {
             clearTimeout(retryTimeoutRef.current);
@@ -195,7 +239,7 @@ export function useDiagramSynchronizer({
     } finally {
       isProcessingRef.current = false;
     }
-  }, [projectId, viewerId, setSyncStatus]);
+  }, [projectId, viewerId, canEdit, setSyncStatus]);
 
   // Hidratación inicial del snapshot servidor + IndexedDB
   useEffect(() => {
@@ -205,7 +249,7 @@ export function useDiagramSynchronizer({
       setDiagramContext(
         projectId,
         viewerId,
-        true
+        canEdit
       );
 
       try {
@@ -217,18 +261,20 @@ export function useDiagramSynchronizer({
 
         if (isCancelled) return;
 
+        // Si canEdit es false (READER), no proyectar operaciones locales no confirmadas en el store;
+        // mantenerlas en IndexedDB pero sin aplicar cambios.
         hydrateSnapshot(
-          initialSnapshot ?? { classes: [] },
-          pendingOps
+          initialSnapshot ?? { classes: [], relations: [] },
+          canEdit ? pendingOps : []
         );
 
-        if (pendingOps.length > 0) {
+        if (canEdit && pendingOps.length > 0) {
           processQueue();
         }
       } catch (err) {
         console.error("Error hidratando desde IndexedDB:", err);
         if (!isCancelled) {
-          hydrateSnapshot(initialSnapshot ?? { classes: [] });
+          hydrateSnapshot(initialSnapshot ?? { classes: [], relations: [] });
         }
       }
     }
@@ -241,7 +287,7 @@ export function useDiagramSynchronizer({
         clearTimeout(retryTimeoutRef.current);
       }
     };
-  }, [projectId, viewerId, initialSnapshot, setDiagramContext, hydrateSnapshot, processQueue]);
+  }, [projectId, viewerId, initialSnapshot, canEdit, setDiagramContext, hydrateSnapshot, processQueue]);
 
   // Listener para evento custom diagram:process-queue y online
   useEffect(() => {

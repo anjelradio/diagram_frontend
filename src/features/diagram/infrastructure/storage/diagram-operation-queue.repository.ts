@@ -2,6 +2,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type {
   CreateClassPayload,
   DiagramOperation,
+  DiagramOperationInput,
 } from "../../domain/entities/diagram-operation.entity";
 import type { DiagramOperationQueueRepository } from "../../domain/repositories/diagram-operation-queue.repository";
 
@@ -59,37 +60,96 @@ function makeProjectRange(
   );
 }
 
+export const VALID_OPERATION_KINDS = new Set([
+  "CREATE_CLASS",
+  "RENAME_CLASS",
+  "MOVE_CLASS",
+  "DELETE_CLASS",
+  "CREATE",
+  "RENAME",
+  "MOVE",
+  "DELETE",
+  "CREATE_ATTRIBUTE",
+  "UPDATE_ATTRIBUTE",
+  "REPOSITION_ATTRIBUTE",
+  "DELETE_ATTRIBUTE",
+  "CREATE_RELATION",
+  "RENAME_RELATION",
+  "DELETE_RELATION",
+]);
+
 /**
- * Normaliza operaciones CREATE legadas que no incluyan primaryAttribute.
+ * Normaliza operaciones legadas (* -> *_CLASS) y asegura primaryAttribute canónica.
+ * Rechaza operaciones con kinds desconocidos o datos inválidos.
  */
 export function normalizeDiagramOperation(
-  operation: DiagramOperation
+  operation: unknown
 ): DiagramOperation {
-  if (operation.kind === "CREATE") {
-    const payload = operation.payload as CreateClassPayload;
-    if (!payload.primaryAttribute) {
-      return {
-        ...operation,
-        payload: {
-          ...payload,
-          primaryAttribute: {
-            id: crypto.randomUUID(),
-            name: "id",
-            dataType: "UUID",
-            position: 0,
-            isPrimaryKey: true,
-            isNullable: false,
-          },
-        },
-      };
-    }
+  if (!operation || typeof operation !== "object" || !("kind" in operation)) {
+    throw new Error("Operación de diagrama corrupta o inválida");
   }
-  return operation;
+
+  const op = operation as Record<string, unknown>;
+  const kind = typeof op.kind === "string" ? op.kind : "";
+  if (!VALID_OPERATION_KINDS.has(kind)) {
+    throw new Error(`Kind de operación desconocido o no soportado: ${kind}`);
+  }
+
+  if (op.kind === "CREATE" || op.kind === "CREATE_CLASS") {
+    const payload = (op.payload || {}) as CreateClassPayload;
+    const primaryAttribute = payload.primaryAttribute || {
+      id: crypto.randomUUID(),
+      name: "id" as const,
+      dataType: "UUID" as const,
+      position: 0 as const,
+      isPrimaryKey: true as const,
+      isNullable: false as const,
+    };
+    return {
+      operationId: op.operationId,
+      viewerId: op.viewerId,
+      projectId: op.projectId,
+      sequence: op.sequence,
+      createdAt: op.createdAt,
+      attempts: op.attempts ?? 0,
+      nextAttemptAt: op.nextAttemptAt,
+      state: op.state ?? "pending",
+      kind: "CREATE_CLASS",
+      classId: op.classId,
+      payload: {
+        ...payload,
+        primaryAttribute,
+      },
+    } as DiagramOperation;
+  }
+
+  if (op.kind === "RENAME") {
+    return {
+      ...op,
+      kind: "RENAME_CLASS",
+    } as DiagramOperation;
+  }
+
+  if (op.kind === "MOVE") {
+    return {
+      ...op,
+      kind: "MOVE_CLASS",
+    } as DiagramOperation;
+  }
+
+  if (op.kind === "DELETE") {
+    return {
+      ...op,
+      kind: "DELETE_CLASS",
+    } as DiagramOperation;
+  }
+
+  return op as DiagramOperation;
 }
 
 export const diagramOperationQueueRepositoryImpl: DiagramOperationQueueRepository = {
   async enqueue(
-    operation: Omit<DiagramOperation, "sequence">
+    operation: DiagramOperationInput
   ): Promise<DiagramOperation> {
     const db = await getDb();
     const tx = db.transaction(STORE_NAME, "readwrite");
@@ -108,7 +168,7 @@ export const diagramOperationQueueRepositoryImpl: DiagramOperationQueueRepositor
     const completeOp: DiagramOperation = {
       ...operation,
       sequence: nextSequence,
-    };
+    } as DiagramOperation;
 
     await store.add(completeOp);
     await tx.done;
@@ -121,12 +181,27 @@ export const diagramOperationQueueRepositoryImpl: DiagramOperationQueueRepositor
     projectId: string
   ): Promise<DiagramOperation | null> {
     const db = await getDb();
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const index = tx.objectStore(STORE_NAME).index(INDEX_NAME);
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const index = store.index(INDEX_NAME);
     const range = makeProjectRange(viewerId, projectId);
 
     const cursor = await index.openCursor(range, "next");
-    return cursor ? normalizeDiagramOperation(cursor.value) : null;
+    if (!cursor) {
+      await tx.done;
+      return null;
+    }
+
+    const raw = cursor.value;
+    const normalized = normalizeDiagramOperation(raw);
+
+    // Si la operación requirió migración, reescribir durablemente en IndexedDB
+    if (raw.kind !== normalized.kind || JSON.stringify(raw.payload) !== JSON.stringify(normalized.payload)) {
+      await cursor.update(normalized);
+    }
+    await tx.done;
+
+    return normalized;
   },
 
   async getAllPending(
@@ -134,16 +209,24 @@ export const diagramOperationQueueRepositoryImpl: DiagramOperationQueueRepositor
     projectId: string
   ): Promise<DiagramOperation[]> {
     const db = await getDb();
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const index = tx.objectStore(STORE_NAME).index(INDEX_NAME);
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const index = store.index(INDEX_NAME);
     const range = makeProjectRange(viewerId, projectId);
 
     const operations: DiagramOperation[] = [];
     let cursor = await index.openCursor(range, "next");
     while (cursor) {
-      operations.push(normalizeDiagramOperation(cursor.value));
+      const raw = cursor.value;
+      const normalized = normalizeDiagramOperation(raw);
+
+      if (raw.kind !== normalized.kind || JSON.stringify(raw.payload) !== JSON.stringify(normalized.payload)) {
+        await cursor.update(normalized);
+      }
+      operations.push(normalized);
       cursor = await cursor.continue();
     }
+    await tx.done;
 
     return operations;
   },

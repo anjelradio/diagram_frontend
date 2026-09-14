@@ -25,14 +25,17 @@ export const AddAttributeButton = memo(function AddAttributeButton({
 }: AddAttributeButtonProps) {
   const projectId = useAppStore((s) => s.projectId);
   const viewerId = useAppStore((s) => s.viewerId);
+  const canEdit = useAppStore((s) => s.canEdit);
   const addAttributeOptimistic = useAppStore((s) => s.addAttributeOptimistic);
   const setSelectedAttribute = useAppStore((s) => s.setSelectedAttribute);
+
+  if (!canEdit) return null;
 
   const handleAddAttribute = async (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
 
-    if (!projectId || !viewerId) return;
+    if (!projectId || !viewerId || !canEdit) return;
 
     const newAttributeId = crypto.randomUUID();
     // La PK ocupa la posición 0, los secundarios inician en position >= 1
