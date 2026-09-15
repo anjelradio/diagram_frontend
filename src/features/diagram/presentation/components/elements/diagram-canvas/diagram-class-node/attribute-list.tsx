@@ -28,6 +28,7 @@ export type AttributeListProps = {
   selectedAttributeId?: string | null;
   onSelectAttribute?: (attributeId: string) => void;
   renderTypeTrigger?: (attribute: DiagramAttribute) => React.ReactNode;
+  canEdit?: boolean;
 };
 
 const SortableAttributeRow = memo(function SortableAttributeRow({
@@ -73,10 +74,12 @@ export const AttributeList = memo(function AttributeList({
   selectedAttributeId,
   onSelectAttribute,
   renderTypeTrigger,
+  canEdit: canEditOverride,
 }: AttributeListProps) {
   const projectId = useAppStore((s) => s.projectId);
   const viewerId = useAppStore((s) => s.viewerId);
-  const canEdit = useAppStore((s) => s.canEdit);
+  const storeCanEdit = useAppStore((s) => s.canEdit);
+  const canEdit = canEditOverride ?? storeCanEdit;
   const repositionAttributeOptimistic = useAppStore(
     (s) => s.repositionAttributeOptimistic
   );

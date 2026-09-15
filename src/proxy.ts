@@ -73,8 +73,9 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico, sitemap.xml, robots.txt
-     * - images (public static files like /images/not_thumbnail.webp)
+     * - images, assistant_states (public static assets)
+     * - static extensions (.webp, .png, .jpg, .jpeg, .gif, .svg, .ico)
      */
-    "/((?!api|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|images).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|images|assistant_states|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

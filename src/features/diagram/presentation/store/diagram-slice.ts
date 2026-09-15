@@ -1,24 +1,24 @@
 import { applyNodeChanges, type Node, type NodeChange } from "@xyflow/react";
 import type { StateCreator } from "zustand";
-import type { DiagramAttribute } from "../../domain/entities/diagram-attribute.entity";
+import type { DiagramAttribute } from "../../domain/entities/diagram-attribute.entity.ts";
 import type {
   DiagramClass,
   DiagramClassWithAttributes,
   DiagramSnapshot,
-} from "../../domain/entities/diagram-class.entity";
-import type { DiagramOperation } from "../../domain/entities/diagram-operation.entity";
+} from "../../domain/entities/diagram-class.entity.ts";
+import type { DiagramOperation } from "../../domain/entities/diagram-operation.entity.ts";
 
 import type {
   DiagramCardinality,
   DiagramRelation,
   DiagramRelationHandle,
   RelationPreset,
-} from "../../domain/entities/diagram-relation.entity";
-import type { PlannedRelationAggregate } from "../../domain/services/diagram-relation-planner";
+} from "../../domain/entities/diagram-relation.entity.ts";
+import type { PlannedRelationAggregate } from "../../domain/services/diagram-relation-planner.ts";
 import {
   projectDiagramOperation,
   projectDiagramOperations,
-} from "./diagram-operation-projector";
+} from "./diagram-operation-projector.ts";
 
 export type DiagramClassNodeData = {
   id: string;
@@ -117,6 +117,7 @@ export type DiagramSlice = {
   ) => void;
   removeAttributeOptimistic: (classId: string, attributeId: string) => void;
   setSelectedAttribute: (selection: SelectedAttribute) => void;
+  applyRemoteMutation: (operationType: string, data: Record<string, unknown>) => void;
 };
 
 export const createDiagramSlice: StateCreator<
@@ -174,6 +175,70 @@ export const createDiagramSlice: StateCreator<
 
   setSelectedAttribute: (selectedAttribute) =>
     set({ selectedAttribute }),
+
+  applyRemoteMutation: (operationType, data) => {
+    set((state) => {
+      const classId = String(data.class_id ?? "");
+      const attributeId = String(data.attribute_id ?? data.id ?? "");
+      if (operationType === "MOVE_CLASS") return { nodes: state.nodes.map((n) => n.id === classId ? { ...n, position: { x: Number(data.position_x ?? 0), y: Number(data.position_y ?? 0) } } : n) };
+      if (operationType === "RENAME_CLASS") return { nodes: state.nodes.map((n) => n.id === classId ? { ...n, data: { ...n.data, name: String(data.name) } } : n) };
+      if (operationType === "DELETE_CLASS") return { nodes: state.nodes.filter((n) => n.id !== classId), relations: state.relations.filter((r) => r.source.classId !== classId && r.target.classId !== classId) };
+      if (operationType === "CREATE_CLASS") return { nodes: [...state.nodes, { id: String(data.id), type: "diagramClass", position: { x: Number(data.position_x ?? 0), y: Number(data.position_y ?? 0) }, data: { id: String(data.id), name: String(data.name), attributes: Array.isArray(data.attributes) ? data.attributes as DiagramAttribute[] : [] } }] };
+      if (operationType === "CREATE_ATTRIBUTE") return { nodes: state.nodes.map((n) => n.id === classId ? { ...n, data: { ...n.data, attributes: [...(n.data.attributes || []), data as unknown as DiagramAttribute].sort((a, b) => a.position - b.position) } } : n) };
+      if (operationType === "UPDATE_ATTRIBUTE") return { nodes: state.nodes.map((n) => n.id === classId ? { ...n, data: { ...n.data, attributes: (n.data.attributes || []).map((a) => a.id === attributeId ? { ...a, ...(data.name !== undefined ? { name: String(data.name) } : {}), ...(data.data_type !== undefined ? { dataType: data.data_type as DiagramAttribute["dataType"] } : {}), ...(data.is_nullable !== undefined ? { isNullable: Boolean(data.is_nullable) } : {}) } : a) } } : n) };
+      if (operationType === "REPOSITION_ATTRIBUTE") {
+        const targetPosition = Number(data.position ?? 1);
+        return {
+          nodes: state.nodes.map((node) => {
+            if (node.id !== classId) return node;
+            const currentAttrs = node.data.attributes || [];
+            const pk = currentAttrs.find((a) => a.isPrimaryKey);
+            const moving = currentAttrs.find((a) => a.id === attributeId);
+            if (!moving) return node;
+
+            const otherSecondaries = currentAttrs
+              .filter((a) => !a.isPrimaryKey && a.id !== attributeId)
+              .sort((a, b) => a.position - b.position);
+
+            const targetIndex = Math.max(
+              0,
+              Math.min(targetPosition - 1, otherSecondaries.length)
+            );
+            otherSecondaries.splice(targetIndex, 0, { ...moving, position: targetPosition });
+
+            const updatedSecondaries = otherSecondaries.map((attr, idx) => ({
+              ...attr,
+              position: idx + 1,
+            }));
+
+            const nextAttrs = pk ? [pk, ...updatedSecondaries] : updatedSecondaries;
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                attributes: nextAttrs,
+              },
+            };
+          }),
+        };
+      }
+      if (operationType === "DELETE_ATTRIBUTE") return { nodes: state.nodes.map((n) => n.id === classId ? { ...n, data: { ...n.data, attributes: (n.data.attributes || []).filter((a) => a.id !== attributeId) } } : n) };
+      if (operationType === "RENAME_RELATION") return { relations: state.relations.map((r) => r.id === String(data.relation_id) ? { ...r, name: String(data.name) } : r) };
+      if (operationType === "DELETE_RELATION") return { relations: state.relations.filter((r) => r.id !== String(data.relation_id)) };
+      if (operationType === "CREATE_RELATION") {
+        const source = (data.source || {}) as Record<string, unknown>;
+        const target = (data.target || {}) as Record<string, unknown>;
+        const relation = {
+          id: String(data.id), name: String(data.name || ""), relationType: String(data.relation_type || data.relationType),
+          source: { classId: String(source.class_id || source.classId), handle: String(source.handle), cardinality: source.cardinality ?? null },
+          target: { classId: String(target.class_id || target.classId), handle: String(target.handle), cardinality: target.cardinality ?? null },
+          bridge: null,
+        } as unknown as DiagramRelation;
+        return { relations: [...state.relations, relation] };
+      }
+      return {};
+    });
+  },
 
   setRelationPickerOpen: (isRelationPickerOpen) =>
     set({ isRelationPickerOpen }),

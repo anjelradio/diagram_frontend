@@ -34,7 +34,8 @@ import type {
   DiagramRelationHandle,
   DiagramRelationType,
 } from "@/features/diagram/domain/entities/diagram-relation.entity";
-import { sendCollaborationMessage } from "@/features/diagram/infrastructure/realtime/collaboration-socket";
+import { sendRealtimeMessage } from "@/features/realtime/infrastructure/websocket/realtime-socket";
+import { RemoteCursorsOverlay } from "@/features/realtime/presentation/components/elements/remote-cursors-overlay";
 
 export type CanvasTool =
   | "cursor"
@@ -94,6 +95,15 @@ export function DiagramFlowCanvas({
   const canEdit = useAppStore((s) => s.canEdit);
   const classLocks = useAppStore((s) => s.classLocks);
 
+  // React Flow respeta `draggable` por nodo: evita iniciar un arrastre ajeno.
+  const interactiveNodes = useMemo(
+    () => nodes.map((node) => ({
+      ...node,
+      draggable: canEdit && !isTemporaryHand && activeTool !== "create-class" && (!classLocks[node.id] || classLocks[node.id]?.userId === viewerId),
+    })),
+    [activeTool, canEdit, classLocks, isTemporaryHand, nodes, viewerId]
+  );
+
   const edges = useMemo(
     () => convertRelationsToEdges(relations, selectedRelationId),
     [relations, selectedRelationId]
@@ -151,16 +161,14 @@ export function DiagramFlowCanvas({
       params: { nodeId?: string | null; handleId?: string | null }
     ) => {
       if (params.nodeId && params.handleId) {
-        const lock = classLocks[params.nodeId];
-        if (lock && lock.userId !== viewerId) return;
-        sendCollaborationMessage({ type: "class_lock_acquire", class_id: params.nodeId });
+        // Las relaciones no están bloqueadas por la edición exclusiva de una clase.
         useAppStore.getState().setRelationDraftSource({
           classId: params.nodeId,
           handle: params.handleId as DiagramRelationHandle,
         });
       }
     },
-    [classLocks, viewerId]
+    []
   );
 
   // Limpieza de borrador si no se finaliza la conexión
@@ -419,13 +427,53 @@ export function DiagramFlowCanvas({
     }
   };
 
+  const handlePaneMouseMove = useCallback((event: React.MouseEvent) => {
+    if (!canEdit) return;
+    const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    sendRealtimeMessage({ type: "cursor_move", x: position.x, y: position.y });
+  }, [canEdit, screenToFlowPosition]);
+
+  const handleSelectionChange = useCallback(({ nodes: selected }: { nodes: DiagramClassNodeType[] }) => {
+    if (!canEdit) return;
+    const selectedId = selected[0]?.id;
+    const state = useAppStore.getState();
+    Object.keys(state.classLocks).forEach((classId) => {
+      if (classId !== selectedId && state.classLocks[classId].userId === viewerId) {
+        sendRealtimeMessage({ type: "class_lock_release", class_id: classId });
+      }
+    });
+    if (selectedId && !state.classLocks[selectedId]) {
+      sendRealtimeMessage({ type: "class_lock_acquire", class_id: selectedId });
+    }
+  }, [canEdit, viewerId]);
+
+  const handleNodeDragStart = useCallback(
+    (_event: MouseEvent | TouchEvent, node: DiagramClassNodeType) => {
+      if (!canEdit) return;
+      const currentLock = useAppStore.getState().classLocks[node.id];
+      if (!currentLock || currentLock.userId === viewerId) {
+        sendRealtimeMessage({ type: "class_lock_acquire", class_id: node.id });
+      }
+    },
+    [canEdit, viewerId]
+  );
+
+  const handleNodeDrag = useCallback(
+    (_event: MouseEvent | TouchEvent, node: DiagramClassNodeType) => {
+      const lock = useAppStore.getState().classLocks[node.id];
+      if (lock && lock.userId !== viewerId) return;
+      sendRealtimeMessage({ type: "class_drag", class_id: node.id, x: node.position.x, y: node.position.y });
+    },
+    [viewerId]
+  );
+
   // Manejo de fin de arrastre de nodo (US2 - Mover)
   const handleNodeDragStop = async (
     _event: MouseEvent | TouchEvent,
     node: DiagramClassNodeType
   ) => {
     if (!projectId || !viewerId) return;
-    const lock = classLocks[node.id];
+    const lock = useAppStore.getState().classLocks[node.id];
     if (lock && lock.userId !== viewerId) return;
 
     updateClassPositionOptimistic(node.id, {
@@ -449,13 +497,13 @@ export function DiagramFlowCanvas({
         state: "pending",
       });
       window.dispatchEvent(new CustomEvent("diagram:process-queue"));
-      sendCollaborationMessage({
+      sendRealtimeMessage({
         type: "class_drag",
         class_id: node.id,
         x: node.position.x,
         y: node.position.y,
       });
-      sendCollaborationMessage({ type: "class_lock_release", class_id: node.id });
+      sendRealtimeMessage({ type: "class_lock_release", class_id: node.id });
     } catch (err) {
       console.error("Error moviendo clase:", err);
     }
@@ -561,9 +609,13 @@ export function DiagramFlowCanvas({
         return;
       }
 
-      // Prioridad 3: Clases seleccionadas
+      // Prioridad 3: Clases seleccionadas (excluyendo las bloqueadas por otro usuario)
       const state = useAppStore.getState();
-      const selectedNodes = state.nodes.filter((n) => n.selected);
+      const selectedNodes = state.nodes.filter((n) => {
+        if (!n.selected) return false;
+        const lock = state.classLocks[n.id];
+        return !lock || lock.userId === viewerId;
+      });
       if (selectedNodes.length === 0) return;
 
       e.preventDefault();
@@ -664,13 +716,17 @@ export function DiagramFlowCanvas({
       )}
     >
       <ReactFlow<DiagramClassNodeType>
-        nodes={nodes}
+        nodes={interactiveNodes}
         nodeTypes={nodeTypes}
         edges={edges}
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
+        onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}
+        onNodeDrag={handleNodeDrag}
         onPaneClick={handlePaneClick}
+        onPaneMouseMove={handlePaneMouseMove}
+        onSelectionChange={handleSelectionChange}
         onConnect={handleConnect}
         onEdgeClick={canEdit ? (_event, edge) => setSelectedRelationId(edge.id) : undefined}
         onNodeClick={canEdit ? () => setSelectedRelationId(null) : undefined}
@@ -705,6 +761,7 @@ export function DiagramFlowCanvas({
         className="transition-colors duration-200"
         proOptions={{ hideAttribution: true }}
       >
+        <RemoteCursorsOverlay />
         <Background
           variant={BackgroundVariant.Dots}
           gap={PROJECT_CANVAS_CONFIG.grid.gap}

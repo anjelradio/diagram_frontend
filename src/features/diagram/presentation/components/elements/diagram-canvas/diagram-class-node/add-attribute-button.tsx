@@ -11,6 +11,7 @@ type AddAttributeButtonProps = {
   classId: string;
   currentAttributesCount: number;
   onAdded?: (newAttributeId: string) => void;
+  canEdit?: boolean;
 };
 
 /**
@@ -22,10 +23,12 @@ export const AddAttributeButton = memo(function AddAttributeButton({
   classId,
   currentAttributesCount,
   onAdded,
+  canEdit: canEditOverride,
 }: AddAttributeButtonProps) {
   const projectId = useAppStore((s) => s.projectId);
   const viewerId = useAppStore((s) => s.viewerId);
-  const canEdit = useAppStore((s) => s.canEdit);
+  const storeCanEdit = useAppStore((s) => s.canEdit);
+  const canEdit = canEditOverride ?? storeCanEdit;
   const addAttributeOptimistic = useAppStore((s) => s.addAttributeOptimistic);
   const setSelectedAttribute = useAppStore((s) => s.setSelectedAttribute);
 

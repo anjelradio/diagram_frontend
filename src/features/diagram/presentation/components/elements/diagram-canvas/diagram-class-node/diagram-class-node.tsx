@@ -10,6 +10,7 @@ import { ClassNodeHeader } from "./class-node-header";
 import { AttributeList } from "./attribute-list";
 import { AddAttributeButton } from "./add-attribute-button";
 import { RelationHandles } from "./relation-handles";
+import { ClassLockIndicator } from "@/features/realtime/presentation/components/elements/class-lock-indicator";
 
 /**
  * Componente principal de tarjeta de clase UML para el lienzo de Diagrama.
@@ -29,6 +30,8 @@ export const DiagramClassNode = memo(function DiagramClassNode({
   const updateClassNameOptimistic = useAppStore(
     (s) => s.updateClassNameOptimistic
   );
+  const isLockedByOther = Boolean(classLock && classLock.userId !== viewerId);
+  const canEditClass = canEdit && !isLockedByOther;
 
   // Estado para renombrado inline de la clase
   const [isEditingName, setIsEditingName] = useState(false);
@@ -39,7 +42,7 @@ export const DiagramClassNode = memo(function DiagramClassNode({
   }, [data.name]);
 
   const handleStartEditName = () => {
-    if (!canEdit) return;
+    if (!canEditClass) return;
     setIsEditingName(true);
   };
 
@@ -85,7 +88,7 @@ export const DiagramClassNode = memo(function DiagramClassNode({
     <div
       className={cn(
         "group relative min-w-[220px] max-w-[320px] bg-[#17181d]/95 backdrop-blur-md rounded-xl border transition-all duration-150 select-none shadow-xl p-3",
-        canEdit ? "cursor-move" : "cursor-default",
+        canEditClass ? "cursor-move" : "cursor-default",
         selected
           ? "border-indigo-500 ring-2 ring-indigo-500/40 shadow-indigo-500/20"
           : classLock && classLock.userId !== viewerId
@@ -96,9 +99,7 @@ export const DiagramClassNode = memo(function DiagramClassNode({
       aria-label={`Clase ${data.name}`}
     >
       {classLock && classLock.userId !== viewerId && (
-        <span className="absolute -top-6 left-2 rounded-full bg-amber-400/90 px-2 py-0.5 text-[10px] font-medium text-black">
-          {classLock.userName} está editando
-        </span>
+        <ClassLockIndicator userName={classLock.userName} color={classLock.color} />
       )}
       {/* Cabecera con ícono de clase y nombre */}
       <ClassNodeHeader
@@ -106,7 +107,7 @@ export const DiagramClassNode = memo(function DiagramClassNode({
         name={data.name}
         isEditing={isEditingName}
         nameValue={nameValue}
-        canEdit={canEdit}
+        canEdit={canEditClass}
         onStartEdit={handleStartEditName}
         onNameChange={setNameValue}
         onCommit={handleCommitName}
@@ -117,16 +118,18 @@ export const DiagramClassNode = memo(function DiagramClassNode({
       <AttributeList
         classId={id}
         attributes={data.attributes || []}
+        canEdit={canEditClass}
       />
 
       {/* Puntos de anclaje (12 handles) para relaciones UML */}
       <RelationHandles classId={id} />
 
       {/* Botón flotante para añadir atributo: visible solo si canEdit, con cursor y si la tarjeta está seleccionada */}
-      {canEdit && selected && activeTool === "cursor" && (
+      {canEditClass && selected && activeTool === "cursor" && (
         <AddAttributeButton
           classId={id}
           currentAttributesCount={data.attributes?.length ?? 1}
+          canEdit={canEditClass}
         />
       )}
     </div>

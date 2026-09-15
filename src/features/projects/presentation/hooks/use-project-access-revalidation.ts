@@ -42,63 +42,76 @@ export function useProjectAccessRevalidation({
 }: UseProjectAccessRevalidationOptions) {
   const router = useRouter();
   const isCheckingRef = useRef(false);
+  const lastCheckedAtRef = useRef(0);
   const currentRoleRef = useRef(currentRole);
+
+  const REVALIDATION_COOLDOWN_MS = 15_000;
 
   useEffect(() => {
     currentRoleRef.current = currentRole;
   }, [currentRole]);
 
-  const handleRevalidate = useCallback(async () => {
-    if (isCheckingRef.current) return;
-    if (!projectId) return;
+  const handleRevalidate = useCallback(
+    async (options?: { force?: boolean }) => {
+      const force = options?.force ?? false;
+      const now = Date.now();
 
-    isCheckingRef.current = true;
-
-    try {
-      const result = await projectRepositoryImpl.getProject(projectId);
-
-      if (!result.ok) {
-        if (result.statusCode === 404 || result.statusCode === 403) {
-          appToast.error(
-            "Acceso revocado",
-            "El proyecto no existe o ya no tienes acceso a él."
-          );
-          if (onAccessRevoked) {
-            onAccessRevoked();
-          } else {
-            router.replace("/projects");
-          }
-        }
+      if (!force && now - lastCheckedAtRef.current < REVALIDATION_COOLDOWN_MS) {
         return;
       }
+      if (isCheckingRef.current) return;
+      if (!projectId) return;
 
-      const updated = result.data;
-      const prevRole = currentRoleRef.current;
-      const newRole = updated.accessRole;
+      isCheckingRef.current = true;
+      lastCheckedAtRef.current = now;
 
-      if (newRole !== prevRole) {
-        // Si bajó de nivel a READER (downgrade)
-        if (newRole === ProjectAccessRole.READER) {
-          const store = useAppStore.getState();
-          store.cancelRelationCreation();
-          store.setActiveTool("hand");
-          store.setDiagramContext(projectId, viewerId, false);
-          appToast.info("Permisos actualizados: modo solo lectura activado.");
-        } else {
-          // Si subió a EDITOR u OWNER
-          const store = useAppStore.getState();
-          store.setDiagramContext(projectId, viewerId, true);
-          appToast.info("Permisos de edición habilitados.");
+      try {
+        const result = await projectRepositoryImpl.getProject(projectId);
+
+        if (!result.ok) {
+          if (result.statusCode === 404 || result.statusCode === 403) {
+            appToast.error(
+              "Acceso revocado",
+              "El proyecto no existe o ya no tienes acceso a él."
+            );
+            if (onAccessRevoked) {
+              onAccessRevoked();
+            } else {
+              router.replace("/projects");
+            }
+          }
+          return;
         }
 
-        onAccessUpdated(updated);
+        const updated = result.data;
+        const prevRole = currentRoleRef.current;
+        const newRole = updated.accessRole;
+
+        if (newRole !== prevRole) {
+          // Si bajó de nivel a READER (downgrade)
+          if (newRole === ProjectAccessRole.READER) {
+            const store = useAppStore.getState();
+            store.cancelRelationCreation();
+            store.setActiveTool("hand");
+            store.setDiagramContext(projectId, viewerId, false);
+            appToast.info("Permisos actualizados: modo solo lectura activado.");
+          } else {
+            // Si subió a EDITOR u OWNER
+            const store = useAppStore.getState();
+            store.setDiagramContext(projectId, viewerId, true);
+            appToast.info("Permisos de edición habilitados.");
+          }
+
+          onAccessUpdated(updated);
+        }
+      } catch (err) {
+        console.error("Error al revalidar acceso al proyecto:", err);
+      } finally {
+        isCheckingRef.current = false;
       }
-    } catch (err) {
-      console.error("Error al revalidar acceso al proyecto:", err);
-    } finally {
-      isCheckingRef.current = false;
-    }
-  }, [projectId, viewerId, onAccessUpdated, onAccessRevoked, router]);
+    },
+    [projectId, viewerId, onAccessUpdated, onAccessRevoked, router]
+  );
 
   useEffect(() => {
     const handleFocus = () => {
@@ -112,7 +125,7 @@ export function useProjectAccessRevalidation({
     };
 
     const handleAccessRevokedEvent = () => {
-      handleRevalidate();
+      handleRevalidate({ force: true });
     };
 
     window.addEventListener("focus", handleFocus);

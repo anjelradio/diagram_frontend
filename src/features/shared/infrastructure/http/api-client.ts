@@ -77,6 +77,13 @@ type FormStatusRequestConfig = Omit<RequestConfig, "body"> & {
   body: FormData;
 };
 
+type FormDataRequestConfig<TParsed, TResult> = Omit<RequestConfig, "body"> & {
+  fallbackMessage: string;
+  body: FormData;
+  responseSchema: ZodType<TParsed>;
+  mapData: (data: TParsed) => TResult;
+};
+
 type FileRequestConfig = RequestConfig & {
   fallbackMessage: string;
   defaultFileName: string;
@@ -306,7 +313,38 @@ export async function apiRequestFormStatus(
 
     return { ok: true };
   } catch {
-    return errorResult("Error de conexi\u00f3n. Intenta m\u00e1s tarde.");
+    return errorResult("Error de conexión. Intenta más tarde.");
+  }
+}
+
+/**
+ * Para endpoints que reciben un FormData (subida de archivos, multipart) y retornan datos JSON.
+ * Reintenta automáticamente con JWT renovado en caso de 401.
+ */
+export async function apiRequestFormData<TParsed, TResult>(
+  config: FormDataRequestConfig<TParsed, TResult>,
+): Promise<ApiResult<TResult>> {
+  const withAuth = config.withAuth !== false;
+
+  try {
+    const res = await executeWithAuthRetry(withAuth, (token) =>
+      doFormRequest(config, token),
+    );
+
+    // Retry en 401: el JWT expiró, refrescamos y reintentamos una vez
+    if (!res.ok) {
+      return serverErrorResult(res, config.fallbackMessage);
+    }
+
+    const responseData = await res.json();
+    const parsed = config.responseSchema.safeParse(responseData);
+    if (!parsed.success) {
+      return errorResult("Error en la respuesta del servidor");
+    }
+
+    return { ok: true, data: config.mapData(parsed.data) };
+  } catch {
+    return errorResult("Error de conexión. Intenta más tarde.");
   }
 }
 

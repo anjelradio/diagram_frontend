@@ -5,7 +5,6 @@ import {
   ArrowUpRight,
   Pencil,
   Sparkles,
-  Terminal,
 } from "lucide-react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
@@ -34,12 +33,22 @@ import { ProjectInformationPopover } from "./project-information-dialog";
 import { DeleteProjectDialog } from "./delete-project-dialog";
 import { useProjectAccessRevalidation } from "@/features/projects/presentation/hooks/use-project-access-revalidation";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
-import { useCollaborationSocket } from "@/features/diagram/presentation/hooks/use-collaboration-socket";
+import { useDiagramRealtimeBridge } from "@/features/diagram/presentation/hooks/use-diagram-realtime-bridge";
+import type {
+  AgentActivity,
+  AssistantVisualState,
+} from "@/features/assistant/domain/entities/agent-activity.entity";
+import { AgentActivityTrigger } from "@/features/assistant/presentation/components/elements/agent-activity-trigger";
+import { AgentTriggerButton } from "@/features/assistant/presentation/components/elements/agent-trigger-button";
+import { AgentOptionsDropdown } from "@/features/assistant/presentation/components/elements/agent-options-dropdown";
+import { AgentAuroraOverlay } from "@/features/assistant/presentation/components/elements/agent-aurora-overlay";
+import { useVoiceRecorder } from "@/features/assistant/presentation/hooks/use-voice-recorder";
 
 type ProjectCanvasViewProps = {
   project: ProjectDetail;
   initialMembers?: ProjectMember[];
   initialSnapshot?: DiagramSnapshot;
+  initialActivities?: AgentActivity[];
   viewerId: string;
 };
 
@@ -52,18 +61,36 @@ export function ProjectCanvasView({
   project,
   initialMembers = [],
   initialSnapshot,
+  initialActivities = [],
   viewerId,
 }: ProjectCanvasViewProps) {
   const [currentProject, setCurrentProject] = useState<ProjectDetail>(project);
   const [isTemporaryHand, setIsTemporaryHand] = useState(false);
 
   const capabilities = deriveProjectCanvasCapabilities(currentProject.accessRole);
-  const canEdit = capabilities.canEditDiagram;
+  const isAgentLocked = useAppStore((s) => s.isAgentLocked);
 
-  useCollaborationSocket({
+  const [isAssistantOptionsOpen, setIsAssistantOptionsOpen] = useState(false);
+  const { isRecording, isSending, toggleRecording, cancelRecording } = useVoiceRecorder({
     projectId: currentProject.id,
+  });
+  const canEdit = capabilities.canEditDiagram && !isAgentLocked && !isSending;
+
+  const assistantVisualState: AssistantVisualState =
+    isAgentLocked || isSending
+      ? "thinking"
+      : isRecording
+      ? "recording"
+      : isAssistantOptionsOpen
+      ? "options_open"
+      : "idle";
+
+  useDiagramRealtimeBridge({
+    projectId: currentProject.id,
+    viewerId,
     role: currentProject.accessRole as "OWNER" | "EDITOR" | "READER",
     enabled: Boolean(viewerId),
+    onRoleChanged: (accessRole) => setCurrentProject((current) => ({ ...current, accessRole })),
   });
 
   // Revalidación reactiva ante cambios de foco/visibilidad y 403/404
@@ -209,6 +236,26 @@ export function ProjectCanvasView({
         }}
       />
 
+      {/* Botón flotante del Asistente IA (bajo el menú de 3 líneas) */}
+      <div className="fixed top-[58px] left-5 z-30 pointer-events-auto">
+        <AgentOptionsDropdown
+          isOpen={isAssistantOptionsOpen}
+          onOpenChange={setIsAssistantOptionsOpen}
+          isRecording={isRecording}
+          onSelectVoice={toggleRecording}
+          onCancelVoice={cancelRecording}
+          disabled={!capabilities.canEditDiagram || isAgentLocked || isSending}
+        >
+          <AgentTriggerButton
+            state={assistantVisualState}
+            disabled={!capabilities.canEditDiagram || isAgentLocked || isSending}
+          />
+        </AgentOptionsDropdown>
+      </div>
+
+      {/* Efecto perimetral de Auroras Boreales durante el bloqueo del agente */}
+      <AgentAuroraOverlay isLocked={isAgentLocked || isSending} />
+
       {/* Encabezado flotante minimalista */}
       <header className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between py-3 px-5 pointer-events-none">
         {/* Izquierda: Menú principal y título del proyecto */}
@@ -331,16 +378,10 @@ export function ProjectCanvasView({
       <footer className="fixed bottom-6 left-0 right-0 z-30 px-5 flex items-center justify-between pointer-events-none">
         {/* Izquierda: Registro de agente */}
         <div className="flex-1 flex justify-start">
-          <button
-            type="button"
-            onClick={() =>
-              appToast.info("El registro de actividad estará disponible próximamente.")
-            }
-            className="pointer-events-auto flex items-center space-x-2 bg-[#191a1d] text-white border border-white/10 py-2 px-4 rounded-full shadow-xl hover:bg-white/10 transition text-xs font-medium active:scale-95 cursor-pointer"
-          >
-            <Terminal className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Registro de agente</span>
-          </button>
+          <AgentActivityTrigger
+            projectId={currentProject.id}
+            initialActivities={initialActivities}
+          />
         </div>
 
         {/* Centro: Píldora de orientación contextual */}
