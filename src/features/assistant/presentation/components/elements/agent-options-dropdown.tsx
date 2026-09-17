@@ -13,9 +13,8 @@ interface AgentOptionsDropdownProps {
   children: React.ReactNode;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  isRecording: boolean;
+  onSelectImage: () => void;
   onSelectVoice: () => void;
-  onCancelVoice?: () => void;
   disabled?: boolean;
 }
 
@@ -23,9 +22,8 @@ export function AgentOptionsDropdown({
   children,
   isOpen,
   onOpenChange,
-  isRecording,
+  onSelectImage,
   onSelectVoice,
-  onCancelVoice,
   disabled = false,
 }: AgentOptionsDropdownProps) {
   return (
@@ -44,59 +42,37 @@ export function AgentOptionsDropdown({
           Asistente IA
         </div>
 
-        {/* Opción 1: Imagen (Deshabilitada con badge Próximamente) */}
+        {/* Opción 1: Imagen (Habilitada para recreación de diagramas) */}
         <DropdownMenuItem
-          disabled
-          className="flex items-center justify-between px-3 py-2 rounded-xl text-xs opacity-50 cursor-not-allowed text-zinc-400"
+          onSelect={() => {
+            onSelectImage();
+          }}
+          className="flex items-center justify-between px-3 py-2 rounded-xl text-xs cursor-pointer hover:bg-white/10 text-white transition"
         >
           <div className="flex items-center space-x-2.5">
-            <ImageIcon className="w-4 h-4 text-zinc-500" />
-            <span>Imagen</span>
+            <ImageIcon className="w-4 h-4 text-indigo-400" />
+            <span className="font-medium">Imagen</span>
           </div>
-          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-zinc-400">
-            Próximamente
+          <span className="text-[10px] font-medium text-zinc-400">
+            Subir diagrama
           </span>
         </DropdownMenuItem>
 
-        {/* Opción 2: Voz (Interactiva) */}
+        {/* Opción 2: Voz (Abre barra flotante de grabación) */}
         <DropdownMenuItem
-          onSelect={(e) => {
-            e.preventDefault();
+          onSelect={() => {
             onSelectVoice();
           }}
-          className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs cursor-pointer transition ${
-            isRecording
-              ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-              : "hover:bg-white/10 text-white"
-          }`}
+          className="flex items-center justify-between px-3 py-2 rounded-xl text-xs cursor-pointer hover:bg-white/10 text-white transition"
         >
           <div className="flex items-center space-x-2.5">
-            {isRecording ? (
-              <Radio className="w-4 h-4 text-rose-400 animate-pulse" />
-            ) : (
-              <Mic className="w-4 h-4 text-indigo-400" />
-            )}
+            <Mic className="w-4 h-4 text-indigo-400" />
             <span className="font-medium">Voz</span>
           </div>
-
-          {isRecording ? (
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/30 text-rose-300 animate-pulse">
-              Grabando...
-            </span>
-          ) : (
-            <span className="text-[10px] font-medium text-zinc-400">
-              Dictar orden
-            </span>
-          )}
+          <span className="text-[10px] font-medium text-zinc-400">
+            Dictar orden
+          </span>
         </DropdownMenuItem>
-        {isRecording && onCancelVoice ? (
-          <DropdownMenuItem
-            onSelect={onCancelVoice}
-            className="rounded-xl px-3 py-2 text-xs text-zinc-400 hover:bg-white/10 hover:text-white"
-          >
-            Cancelar grabación
-          </DropdownMenuItem>
-        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

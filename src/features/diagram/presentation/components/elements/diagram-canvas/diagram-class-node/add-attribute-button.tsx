@@ -4,6 +4,7 @@ import { memo } from "react";
 import { Plus } from "lucide-react";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
 import { diagramOperationQueueRepositoryImpl } from "@/features/diagram/infrastructure/storage/diagram-operation-queue.repository";
+import { sendRealtimeMessage } from "@/features/realtime/infrastructure/websocket/realtime-socket";
 import type { DiagramAttribute } from "@/features/diagram/domain/entities/diagram-attribute.entity";
 import type { CreateAttributePayload } from "@/features/diagram/domain/entities/diagram-operation.entity";
 
@@ -39,6 +40,11 @@ export const AddAttributeButton = memo(function AddAttributeButton({
     e.preventDefault();
 
     if (!projectId || !viewerId || !canEdit) return;
+
+    const state = useAppStore.getState();
+    if (!state.classLocks[classId] || state.classLocks[classId]?.userId !== viewerId) {
+      sendRealtimeMessage({ type: "class_lock_acquire", class_id: classId });
+    }
 
     const newAttributeId = crypto.randomUUID();
     // La PK ocupa la posición 0, los secundarios inician en position >= 1

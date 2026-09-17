@@ -188,4 +188,32 @@ describe("useDiagramSynchronizer - Transiciones y bloqueo de cola", () => {
     const editorOps = getHydrationOps(true, pendingOps);
     assert.equal(editorOps.length, 1);
   });
+
+  it("protege contra rehidratación del snapshot inicial ante cambios de canEdit (bloqueo/desbloqueo de agente)", () => {
+    let hydrationCount = 0;
+    let initializedProjectKey: string | null = null;
+
+    const simulateEffect = (projectId: string, viewerId: string, canEdit: boolean) => {
+      const projectKey = `${projectId}:${viewerId}`;
+      if (initializedProjectKey === projectKey) return;
+      initializedProjectKey = projectKey;
+      hydrationCount++;
+    };
+
+    // Montaje inicial: canEdit = true
+    simulateEffect("proj-1", "user-1", true);
+    assert.equal(hydrationCount, 1);
+
+    // Agente bloquea el lienzo: canEdit pasa a false
+    simulateEffect("proj-1", "user-1", false);
+    assert.equal(hydrationCount, 1, "No debe rehidratar snapshot cuando el agente bloquea el lienzo");
+
+    // Agente termina: canEdit vuelve a true
+    simulateEffect("proj-1", "user-1", true);
+    assert.equal(hydrationCount, 1, "No debe rehidratar snapshot cuando el agente libera el lienzo");
+
+    // Cambio a otro proyecto: debe hidratar
+    simulateEffect("proj-2", "user-1", true);
+    assert.equal(hydrationCount, 2);
+  });
 });

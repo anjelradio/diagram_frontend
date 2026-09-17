@@ -28,8 +28,8 @@ export function useDiagramRealtimeBridge({
   const generationRef = useRef(0);
 
   const refreshSnapshot = useCallback(
-    async (targetProjectId: string, targetViewerId: string, gen?: number) => {
-      const currentGen = gen ?? ++generationRef.current;
+    async (targetProjectId: string, targetViewerId: string) => {
+      const currentGen = ++generationRef.current;
       const [result, pending] = await Promise.all([
         diagramRepositoryImpl.getDiagram(targetProjectId),
         diagramOperationQueueRepositoryImpl.getAllPending(
@@ -38,7 +38,7 @@ export function useDiagramRealtimeBridge({
         ),
       ]);
 
-      // Descartar respuestas de snapshots obsoletos tras nueva reconexión
+      // Descartar respuestas de snapshots obsoletos si se disparó otra recarga posterior
       if (currentGen !== generationRef.current) return;
 
       if (result.ok) {
@@ -54,12 +54,11 @@ export function useDiagramRealtimeBridge({
 
       switch (message.type) {
         case "presenceSnapshot": {
-          const gen = ++generationRef.current;
           const myLock = message.classLocks.find(
             (lock) => lock.userId === viewerId
           );
           store.setLocalClassLock(myLock?.classId ?? null);
-          void refreshSnapshot(projectId, viewerId, gen);
+          void refreshSnapshot(projectId, viewerId);
           break;
         }
 
@@ -78,16 +77,24 @@ export function useDiagramRealtimeBridge({
               message.mutation.operationType,
               message.mutation.data
             );
+            // No disparar refrescos intermedios para mutaciones del asistente:
+            // el asistente emite un flujo completo y consolida con agentFinished.
             if (
+              message.mutation.senderId !== "assistant" &&
               [
                 "REPOSITION_ATTRIBUTE",
                 "CREATE_RELATION",
                 "DELETE_RELATION",
               ].includes(message.mutation.operationType)
             ) {
-              void refreshSnapshot(projectId, viewerId, generationRef.current);
+              void refreshSnapshot(projectId, viewerId);
             }
           }
+          break;
+
+        case "agentFinished":
+          // Rehidratar inmediatamente el snapshot autoritativo al finalizar el agente
+          void refreshSnapshot(projectId, viewerId);
           break;
 
         default:

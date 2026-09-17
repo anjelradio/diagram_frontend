@@ -113,7 +113,7 @@ export function DiagramFlowCanvas({
     setActiveTool(activeTool);
   }, [activeTool, setActiveTool]);
 
-  const { screenToFlowPosition, fitView, setCenter } = useReactFlow();
+  const { screenToFlowPosition, fitView, setCenter, getNodes } = useReactFlow();
   const hasCenteredOnLoadRef = useRef(false);
 
   // Inicialización de vista: centrado y zoom mínimo al 50% en la carga de la página
@@ -358,6 +358,12 @@ export function DiagramFlowCanvas({
   const handlePaneClick = async (event: React.MouseEvent) => {
     setSelectedAttribute(null);
     setSelectedRelationId(null);
+    const state = useAppStore.getState();
+    Object.keys(state.classLocks).forEach((classId) => {
+      if (state.classLocks[classId].userId === viewerId) {
+        sendRealtimeMessage({ type: "class_lock_release", class_id: classId });
+      }
+    });
     if (!canEdit || !isCreateClassActive || !projectId || !viewerId) return;
 
     const position = screenToFlowPosition({
@@ -503,7 +509,12 @@ export function DiagramFlowCanvas({
         x: node.position.x,
         y: node.position.y,
       });
-      sendRealtimeMessage({ type: "class_lock_release", class_id: node.id });
+      const isStillSelected =
+        node.selected ||
+        getNodes().some((n) => n.id === node.id && n.selected);
+      if (!isStillSelected) {
+        sendRealtimeMessage({ type: "class_lock_release", class_id: node.id });
+      }
     } catch (err) {
       console.error("Error moviendo clase:", err);
     }

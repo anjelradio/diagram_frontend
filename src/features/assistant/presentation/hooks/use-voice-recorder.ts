@@ -9,6 +9,8 @@ interface UseVoiceRecorderOptions {
   onSuccess?: () => void;
 }
 
+export type VoiceRecorderBarState = "idle" | "recording" | "sending";
+
 export function useVoiceRecorder({
   projectId,
   onSuccess,
@@ -99,11 +101,13 @@ export function useVoiceRecorder({
           });
 
           if (result.ok) {
-            // El resumen detallado vive en el registro; el toast es breve y estable.
+            // El resumen detallado vive en el registro; el变 toast es breve y estable.
             appToast.success("¡Tarea terminada!");
             onSuccess?.();
           } else {
-            appToast.error(result.errors.join(". ") || "Error al procesar la orden.");
+            appToast.error(
+              result.errors?.[0] || "Error al procesar la orden."
+            );
           }
         } catch (err) {
           appToast.error("Error de conexión al enviar el audio.");
@@ -138,9 +142,16 @@ export function useVoiceRecorder({
     }
   }, [isRecording, startRecording, stopAndSend]);
 
+  const barState: VoiceRecorderBarState = isSending
+    ? "sending"
+    : isRecording
+    ? "recording"
+    : "idle";
+
   return {
     isRecording,
     isSending,
+    barState,
     startRecording,
     stopAndSend,
     cancelRecording,

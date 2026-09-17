@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
 import type { DiagramClassNodeType } from "@/features/diagram/presentation/store/diagram-slice";
 import { diagramOperationQueueRepositoryImpl } from "@/features/diagram/infrastructure/storage/diagram-operation-queue.repository";
+import { sendRealtimeMessage } from "@/features/realtime/infrastructure/websocket/realtime-socket";
 import { ClassNodeHeader } from "./class-node-header";
 import { AttributeList } from "./attribute-list";
 import { AddAttributeButton } from "./add-attribute-button";
@@ -44,6 +45,10 @@ export const DiagramClassNode = memo(function DiagramClassNode({
   const handleStartEditName = () => {
     if (!canEditClass) return;
     setIsEditingName(true);
+    const state = useAppStore.getState();
+    if (!state.classLocks[id] || state.classLocks[id]?.userId !== viewerId) {
+      sendRealtimeMessage({ type: "class_lock_acquire", class_id: id });
+    }
   };
 
   const handleCommitName = async () => {

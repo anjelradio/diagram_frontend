@@ -47,3 +47,20 @@ export interface VoiceCommandResult {
   actionsCount: number;
   actions: VoiceCommandActionResult[];
 }
+
+export interface ImageCommandInput {
+  projectId: string;
+  imageBlob: Blob;
+  mimeType?: string;
+  prompt?: string;
+}
+
+export interface ImageCommandResult {
+  activityId: string;
+  state: AgentActivityState;
+  transcription: string | null;
+  resume: string | null;
+  imageUrl: string | null;
+  actionsCount: number;
+  actions: VoiceCommandActionResult[];
+}

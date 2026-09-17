@@ -7,6 +7,7 @@ import type { DiagramAttribute } from "@/features/diagram/domain/entities/diagra
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
 import { diagramOperationQueueRepositoryImpl } from "@/features/diagram/infrastructure/storage/diagram-operation-queue.repository";
 import { deriveDiagramAttributeCapabilities } from "@/features/diagram/domain/services/diagram-attribute-capabilities";
+import { sendRealtimeMessage } from "@/features/realtime/infrastructure/websocket/realtime-socket";
 import { AttributeTypePopover } from "./attribute-type-popover";
 
 export type AttributeRowProps = {
@@ -18,6 +19,7 @@ export type AttributeRowProps = {
   renderTypeTrigger?: (attribute: DiagramAttribute) => React.ReactNode;
   // Drag and Drop (US3)
   dragHandleProps?: Record<string, unknown>;
+  canEdit?: boolean;
 };
 
 /**
@@ -33,14 +35,18 @@ export const AttributeRow = memo(function AttributeRow({
   onSelect,
   renderTypeTrigger,
   dragHandleProps,
+  canEdit: canEditProp,
 }: AttributeRowProps) {
-  const canEdit = useAppStore((s) => s.canEdit);
+  const storeCanEdit = useAppStore((s) => s.canEdit);
+  const classLock = useAppStore((s) => s.classLocks[classId]);
+  const viewerId = useAppStore((s) => s.viewerId);
+  const isLockedByOther = Boolean(classLock && classLock.userId !== viewerId);
+  const canEdit = (canEditProp ?? storeCanEdit) && !isLockedByOther;
   const isPk = attribute.isPrimaryKey;
   const isFk = Boolean(attribute.isForeignKey);
   const capabilities = deriveDiagramAttributeCapabilities(attribute, canEdit);
 
   const projectId = useAppStore((s) => s.projectId);
-  const viewerId = useAppStore((s) => s.viewerId);
   const selectedAttribute = useAppStore((s) => s.selectedAttribute);
   const setSelectedAttribute = useAppStore((s) => s.setSelectedAttribute);
   const updateAttributeOptimistic = useAppStore(
@@ -94,6 +100,14 @@ export const AttributeRow = memo(function AttributeRow({
   const isMarqueeActive = isHovered && overflowDistance > 0 && !isEditing;
   const marqueeDuration = Math.min(Math.max(3, overflowDistance / 18), 8);
 
+  const ensureClassLock = () => {
+    if (!canEdit) return;
+    const state = useAppStore.getState();
+    if (!state.classLocks[classId] || state.classLocks[classId]?.userId !== viewerId) {
+      sendRealtimeMessage({ type: "class_lock_acquire", class_id: classId });
+    }
+  };
+
   const isRowSelected =
     canEdit &&
     capabilities.canDelete &&
@@ -104,6 +118,7 @@ export const AttributeRow = memo(function AttributeRow({
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (capabilities.canDelete) {
+      ensureClassLock();
       setSelectedAttribute({ classId, attributeId: attribute.id });
       onSelect?.(attribute.id);
     }
@@ -112,6 +127,7 @@ export const AttributeRow = memo(function AttributeRow({
   const handleStartEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!capabilities.canRename) return;
+    ensureClassLock();
     setIsEditing(true);
   };
 
@@ -184,6 +200,7 @@ export const AttributeRow = memo(function AttributeRow({
       onKeyDown={(e) => {
         if (capabilities.canDelete && (e.key === "Enter" || e.key === " ")) {
           e.stopPropagation();
+          ensureClassLock();
           setSelectedAttribute({ classId, attributeId: attribute.id });
           onSelect?.(attribute.id);
         }
@@ -301,7 +318,7 @@ export const AttributeRow = memo(function AttributeRow({
         {renderTypeTrigger ? (
           renderTypeTrigger(attribute)
         ) : (
-          <AttributeTypePopover classId={classId} attribute={attribute} />
+          <AttributeTypePopover classId={classId} attribute={attribute} canEdit={canEdit} />
         )}
 
         {/* Indicador de obligatoriedad */}

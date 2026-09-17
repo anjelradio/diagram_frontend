@@ -198,4 +198,43 @@ describe("DiagramSlice - applyRemoteMutation", () => {
     });
     assert.equal(store.getState().relations.length, 0);
   });
+
+  it("hydrateSnapshot preserva el estado de selección (selected) de nodos existentes", () => {
+    const store = setup();
+    store.getState().applyRemoteMutation("CREATE_CLASS", {
+      id: "class_selected",
+      name: "Cliente",
+      position_x: 50,
+      position_y: 50,
+      attributes: [],
+    });
+
+    // Marcar como seleccionado manualmente
+    store.setState((prev) => ({
+      nodes: prev.nodes.map((n) =>
+        n.id === "class_selected" ? { ...n, selected: true } : n
+      ),
+    }));
+
+    assert.equal(store.getState().nodes[0]?.selected, true);
+
+    // Hidratar nuevo snapshot que incluye la clase
+    store.getState().hydrateSnapshot({
+      classes: [
+        {
+          id: "class_selected",
+          name: "ClienteActualizado",
+          positionX: 50,
+          positionY: 50,
+          attributes: [],
+        },
+      ],
+      relations: [],
+    });
+
+    const hydratedNode = store.getState().nodes[0];
+    assert.equal(hydratedNode?.id, "class_selected");
+    assert.equal(hydratedNode?.data.name, "ClienteActualizado");
+    assert.equal(hydratedNode?.selected, true, "Debe preservar selected: true");
+  });
 });

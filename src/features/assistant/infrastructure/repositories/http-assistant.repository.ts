@@ -5,16 +5,20 @@ import {
 } from "@/features/shared/infrastructure/http/api-client";
 import type {
   AgentActivity,
+  ImageCommandInput,
+  ImageCommandResult,
   VoiceCommandInput,
   VoiceCommandResult,
 } from "../../domain/entities/agent-activity.entity";
 import type { AssistantRepository } from "../../domain/repositories/assistant.repository";
 import {
   mapAgentActivityListToEntities,
+  mapImageCommandResultToEntity,
   mapVoiceCommandResultToEntity,
 } from "../mappers/assistant.mapper";
 import {
   agentActivityListResponseSchema,
+  imageCommandResultWireSchema,
   voiceCommandResultWireSchema,
 } from "../schemas/assistant.schemas";
 
@@ -68,6 +72,39 @@ export function createAssistantRepository(): AssistantRepository {
         fallbackMessage: "No se pudo procesar la orden de voz.",
         responseSchema: voiceCommandResultWireSchema,
         mapData: mapVoiceCommandResultToEntity,
+      });
+    },
+
+    async sendImageCommand(
+      input: ImageCommandInput
+    ): Promise<ApiResult<ImageCommandResult>> {
+      const formData = new FormData();
+      formData.append("project_id", input.projectId);
+      if (input.prompt) {
+        formData.append("prompt", input.prompt);
+      }
+
+      const mimeType = input.mimeType || "image/png";
+      const extension = mimeType.includes("webp")
+        ? "webp"
+        : mimeType.includes("jpeg") || mimeType.includes("jpg")
+        ? "jpg"
+        : "png";
+      const filename = `diagram.${extension}`;
+
+      const imageFile = new File([input.imageBlob], filename, {
+        type: mimeType,
+      });
+      formData.append("image", imageFile);
+
+      return apiRequestFormData({
+        url: `${ASSISTANT_URL}/image`,
+        method: "POST",
+        withAuth: true,
+        body: formData,
+        fallbackMessage: "No se pudo procesar la imagen del diagrama.",
+        responseSchema: imageCommandResultWireSchema,
+        mapData: mapImageCommandResultToEntity,
       });
     },
   };

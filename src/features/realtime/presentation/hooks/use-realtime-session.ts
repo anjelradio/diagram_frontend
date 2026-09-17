@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
 import type {
@@ -32,6 +32,15 @@ export function useRealtimeSession({
 }: UseRealtimeSessionOptions) {
   const setStatus = useAppStore((s) => s.setRealtimeStatus);
   const reset = useAppStore((s) => s.resetRealtime);
+  // Pulido T020: refs para que callbacks de UI (Agent button) no disparen reconexión ws
+  const onMessageRef = useRef(onMessage);
+  const onRoleChangedRef = useRef(onRoleChanged);
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
+  useEffect(() => {
+    onRoleChangedRef.current = onRoleChanged;
+  }, [onRoleChanged]);
 
   const sendCursor = useCallback((x: number, y: number) => {
     return sendRealtimeMessage({ type: "cursor_move", x, y });
@@ -112,7 +121,7 @@ export function useRealtimeSession({
           break;
 
         case "roleChanged":
-          onRoleChanged?.(message.role);
+          onRoleChangedRef.current?.(message.role);
           if (message.role === "READER") {
             store.releaseAllLocalClassLocks();
           }
@@ -139,7 +148,7 @@ export function useRealtimeSession({
           break;
       }
 
-      onMessage?.(message);
+      onMessageRef.current?.(message);
     };
 
     const socket = new RealtimeSocket({
@@ -157,7 +166,7 @@ export function useRealtimeSession({
       setActiveRealtimeSocket(null);
       reset();
     };
-  }, [enabled, onMessage, onRoleChanged, projectId, reset, role, setStatus, viewerId]);
+  }, [enabled, projectId, reset, role, setStatus, viewerId]);
 
   return {
     sendCursor,

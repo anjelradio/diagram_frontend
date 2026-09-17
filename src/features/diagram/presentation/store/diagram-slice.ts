@@ -180,12 +180,83 @@ export const createDiagramSlice: StateCreator<
     set((state) => {
       const classId = String(data.class_id ?? "");
       const attributeId = String(data.attribute_id ?? data.id ?? "");
+      const normalizeAttr = (raw: Record<string, unknown>): DiagramAttribute => ({
+        id: String(raw.id || raw.attribute_id || ""),
+        classId: raw.class_id ? String(raw.class_id) : raw.classId ? String(raw.classId) : undefined,
+        name: String(raw.name || ""),
+        dataType: (raw.data_type ?? raw.dataType ?? null) as DiagramAttribute["dataType"],
+        position: Number(raw.position ?? 0),
+        isPrimaryKey: Boolean(raw.is_primary_key ?? raw.isPrimaryKey),
+        isNullable: Boolean(raw.is_nullable ?? raw.isNullable ?? true),
+        isForeignKey: Boolean(raw.is_foreign_key ?? raw.isForeignKey),
+        referencedClassId: (raw.referenced_class_id ?? raw.referencedClassId ?? null) as string | null,
+        relationId: (raw.relation_id ?? raw.relationId ?? null) as string | null,
+      });
+
       if (operationType === "MOVE_CLASS") return { nodes: state.nodes.map((n) => n.id === classId ? { ...n, position: { x: Number(data.position_x ?? 0), y: Number(data.position_y ?? 0) } } : n) };
       if (operationType === "RENAME_CLASS") return { nodes: state.nodes.map((n) => n.id === classId ? { ...n, data: { ...n.data, name: String(data.name) } } : n) };
       if (operationType === "DELETE_CLASS") return { nodes: state.nodes.filter((n) => n.id !== classId), relations: state.relations.filter((r) => r.source.classId !== classId && r.target.classId !== classId) };
-      if (operationType === "CREATE_CLASS") return { nodes: [...state.nodes, { id: String(data.id), type: "diagramClass", position: { x: Number(data.position_x ?? 0), y: Number(data.position_y ?? 0) }, data: { id: String(data.id), name: String(data.name), attributes: Array.isArray(data.attributes) ? data.attributes as DiagramAttribute[] : [] } }] };
-      if (operationType === "CREATE_ATTRIBUTE") return { nodes: state.nodes.map((n) => n.id === classId ? { ...n, data: { ...n.data, attributes: [...(n.data.attributes || []), data as unknown as DiagramAttribute].sort((a, b) => a.position - b.position) } } : n) };
-      if (operationType === "UPDATE_ATTRIBUTE") return { nodes: state.nodes.map((n) => n.id === classId ? { ...n, data: { ...n.data, attributes: (n.data.attributes || []).map((a) => a.id === attributeId ? { ...a, ...(data.name !== undefined ? { name: String(data.name) } : {}), ...(data.data_type !== undefined ? { dataType: data.data_type as DiagramAttribute["dataType"] } : {}), ...(data.is_nullable !== undefined ? { isNullable: Boolean(data.is_nullable) } : {}) } : a) } } : n) };
+      if (operationType === "CREATE_CLASS") {
+        const rawAttrs = Array.isArray(data.attributes) ? (data.attributes as Record<string, unknown>[]) : [];
+        const normalizedAttrs = rawAttrs.map(normalizeAttr);
+        return {
+          nodes: [
+            ...state.nodes.filter((n) => n.id !== String(data.id)),
+            {
+              id: String(data.id),
+              type: "diagramClass",
+              position: { x: Number(data.position_x ?? 0), y: Number(data.position_y ?? 0) },
+              data: {
+                id: String(data.id),
+                name: String(data.name),
+                attributes: normalizedAttrs,
+              },
+            },
+          ],
+        };
+      }
+      if (operationType === "CREATE_ATTRIBUTE") {
+        const newAttr = normalizeAttr(data);
+        return {
+          nodes: state.nodes.map((n) => {
+            if (n.id !== classId) return n;
+            const current = (n.data.attributes || []).filter((a) => a.id !== newAttr.id);
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                attributes: [...current, newAttr].sort((a, b) => a.position - b.position),
+              },
+            };
+          }),
+        };
+      }
+      if (operationType === "UPDATE_ATTRIBUTE") {
+        return {
+          nodes: state.nodes.map((n) => {
+            if (n.id !== classId) return n;
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                attributes: (n.data.attributes || []).map((a) => {
+                  if (a.id !== attributeId) return a;
+                  return {
+                    ...a,
+                    ...(data.name !== undefined ? { name: String(data.name) } : {}),
+                    ...(data.data_type !== undefined || data.dataType !== undefined
+                      ? { dataType: (data.data_type ?? data.dataType) as DiagramAttribute["dataType"] }
+                      : {}),
+                    ...(data.is_nullable !== undefined || data.isNullable !== undefined
+                      ? { isNullable: Boolean(data.is_nullable ?? data.isNullable) }
+                      : {}),
+                  };
+                }),
+              },
+            };
+          }),
+        };
+      }
       if (operationType === "REPOSITION_ATTRIBUTE") {
         const targetPosition = Number(data.position ?? 1);
         return {
@@ -404,23 +475,29 @@ export const createDiagramSlice: StateCreator<
   hydrateSnapshot: (snapshot, pendingOps = []) => {
     const projected = projectDiagramOperations(snapshot, pendingOps);
 
-    const nodes: DiagramClassNodeType[] = projected.classes.map((c) => ({
-      id: c.id,
-      type: "diagramClass",
-      position: { x: c.positionX, y: c.positionY },
-      data: {
-        id: c.id,
-        name: c.name,
-        attributes: [...(c.attributes || [])].sort(
-          (a, b) => a.position - b.position
-        ),
-      },
-    }));
+    set((state) => {
+      const nodes: DiagramClassNodeType[] = projected.classes.map((c) => {
+        const existingNode = state.nodes.find((n) => n.id === c.id);
+        return {
+          id: c.id,
+          type: "diagramClass",
+          position: { x: c.positionX, y: c.positionY },
+          selected: existingNode?.selected,
+          data: {
+            id: c.id,
+            name: c.name,
+            attributes: [...(c.attributes || [])].sort(
+              (a, b) => a.position - b.position
+            ),
+          },
+        };
+      });
 
-    set({
-      nodes,
-      relations: [...(projected.relations || [])],
-      isHydrated: true,
+      return {
+        nodes,
+        relations: [...(projected.relations || [])],
+        isHydrated: true,
+      };
     });
   },
 

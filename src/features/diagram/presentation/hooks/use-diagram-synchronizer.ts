@@ -241,17 +241,23 @@ export function useDiagramSynchronizer({
     }
   }, [projectId, viewerId, canEdit, setSyncStatus]);
 
-  // Hidratación inicial del snapshot servidor + IndexedDB
+  const initializedProjectRef = useRef<string | null>(null);
+
+  // Sincronizar contexto de permisos y edición en el store de forma reactiva
   useEffect(() => {
+    setDiagramContext(projectId, viewerId, canEdit);
+  }, [projectId, viewerId, canEdit, setDiagramContext]);
+
+  // Hidratación inicial del snapshot servidor + IndexedDB (estrictamente una vez por montaje de proyecto)
+  useEffect(() => {
+    if (!projectId || !viewerId) return;
+    const projectKey = `${projectId}:${viewerId}`;
+    if (initializedProjectRef.current === projectKey) return;
+    initializedProjectRef.current = projectKey;
+
     let isCancelled = false;
 
     async function init() {
-      setDiagramContext(
-        projectId,
-        viewerId,
-        canEdit
-      );
-
       try {
         const pendingOps =
           await diagramOperationQueueRepositoryImpl.getAllPending(
@@ -287,7 +293,7 @@ export function useDiagramSynchronizer({
         clearTimeout(retryTimeoutRef.current);
       }
     };
-  }, [projectId, viewerId, initialSnapshot, canEdit, setDiagramContext, hydrateSnapshot, processQueue]);
+  }, [projectId, viewerId, initialSnapshot, canEdit, hydrateSnapshot, processQueue]);
 
   // Listener para evento custom diagram:process-queue y online
   useEffect(() => {

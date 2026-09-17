@@ -19,6 +19,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
 import { diagramOperationQueueRepositoryImpl } from "@/features/diagram/infrastructure/storage/diagram-operation-queue.repository";
+import { sendRealtimeMessage } from "@/features/realtime/infrastructure/websocket/realtime-socket";
 import type { DiagramAttribute } from "@/features/diagram/domain/entities/diagram-attribute.entity";
 import { AttributeRow, type AttributeRowProps } from "./attribute-row";
 
@@ -100,8 +101,17 @@ export const AttributeList = memo(function AttributeList({
   const pkAttribute = sortedAttributes.find((a) => a.isPrimaryKey);
   const secondaryAttributes = sortedAttributes.filter((a) => !a.isPrimaryKey);
 
+  const ensureClassLock = () => {
+    if (!canEdit) return;
+    const state = useAppStore.getState();
+    if (!state.classLocks[classId] || state.classLocks[classId]?.userId !== viewerId) {
+      sendRealtimeMessage({ type: "class_lock_acquire", class_id: classId });
+    }
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
     if (!canEdit) return;
+    ensureClassLock();
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -167,6 +177,7 @@ export const AttributeList = memo(function AttributeList({
             classId={classId}
             attribute={pkAttribute}
             isSelected={false}
+            canEdit={canEdit}
           />
         )}
 
@@ -175,6 +186,7 @@ export const AttributeList = memo(function AttributeList({
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
+            onDragStart={ensureClassLock}
             onDragEnd={handleDragEnd}
           >
             <SortableContext
@@ -192,6 +204,7 @@ export const AttributeList = memo(function AttributeList({
                     isSelected={isSelected}
                     onSelect={onSelectAttribute}
                     renderTypeTrigger={renderTypeTrigger}
+                    canEdit={canEdit}
                   />
                 );
               })}
@@ -205,6 +218,7 @@ export const AttributeList = memo(function AttributeList({
               attribute={attr}
               isSelected={false}
               renderTypeTrigger={renderTypeTrigger}
+              canEdit={canEdit}
             />
           ))
         )}

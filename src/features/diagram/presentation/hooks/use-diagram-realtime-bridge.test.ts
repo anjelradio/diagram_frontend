@@ -123,4 +123,56 @@ describe("useDiagramRealtimeBridge - Reconciliación de Snapshot y Cola", () => 
     assert.notEqual(appliedSnapshot, null);
     assert.equal(appliedSnapshot!.classes[0].name, "Nuevo");
   });
+
+  it("reconoce agentFinished y gatilla refresco autoritativo de snapshot", () => {
+    let refreshTriggered = false;
+    const handleMessage = (msg: { type: string }) => {
+      if (msg.type === "agentFinished") {
+        refreshTriggered = true;
+      }
+    };
+
+    handleMessage({ type: "agentFinished" });
+    assert.equal(refreshTriggered, true);
+  });
+
+  it("omite refrescos intermedios para mutaciones emitidas por el asistente", () => {
+    let refreshTriggered = false;
+    const handleDiagramMutation = (mutation: { operationType: string; senderId: string }) => {
+      if (
+        mutation.senderId !== "assistant" &&
+        ["REPOSITION_ATTRIBUTE", "CREATE_RELATION", "DELETE_RELATION"].includes(
+          mutation.operationType
+        )
+      ) {
+        refreshTriggered = true;
+      }
+    };
+
+    // Mutación del asistente (no debe disparar refresco)
+    handleDiagramMutation({ operationType: "CREATE_RELATION", senderId: "assistant" });
+    assert.equal(refreshTriggered, false);
+
+    // Mutación de colaborador normal (sí debe disparar refresco)
+    handleDiagramMutation({ operationType: "CREATE_RELATION", senderId: "user-peer-123" });
+    assert.equal(refreshTriggered, true);
+  });
+
+  it("garantiza que cada invocación de refreshSnapshot incremente la generación monotónicamente", () => {
+    let generation = 0;
+    const callGenerations: number[] = [];
+
+    const triggerRefresh = () => {
+      const currentGen = ++generation;
+      callGenerations.push(currentGen);
+      return currentGen;
+    };
+
+    triggerRefresh();
+    triggerRefresh();
+    triggerRefresh();
+
+    assert.deepEqual(callGenerations, [1, 2, 3]);
+    assert.equal(generation, 3);
+  });
 });

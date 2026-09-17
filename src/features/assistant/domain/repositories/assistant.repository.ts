@@ -1,6 +1,8 @@
 import type { ApiResult } from "@/features/shared/domain/types/api-results";
 import type {
   AgentActivity,
+  ImageCommandInput,
+  ImageCommandResult,
   VoiceCommandInput,
   VoiceCommandResult,
 } from "../entities/agent-activity.entity";
@@ -11,4 +13,5 @@ import type {
 export interface AssistantRepository {
   listActivities(projectId: string): Promise<ApiResult<AgentActivity[]>>;
   sendVoiceCommand(input: VoiceCommandInput): Promise<ApiResult<VoiceCommandResult>>;
+  sendImageCommand(input: ImageCommandInput): Promise<ApiResult<ImageCommandResult>>;
 }

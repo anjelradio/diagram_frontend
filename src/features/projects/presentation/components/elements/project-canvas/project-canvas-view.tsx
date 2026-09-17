@@ -42,7 +42,9 @@ import { AgentActivityTrigger } from "@/features/assistant/presentation/componen
 import { AgentTriggerButton } from "@/features/assistant/presentation/components/elements/agent-trigger-button";
 import { AgentOptionsDropdown } from "@/features/assistant/presentation/components/elements/agent-options-dropdown";
 import { AgentAuroraOverlay } from "@/features/assistant/presentation/components/elements/agent-aurora-overlay";
+import { VoiceRecorderBar } from "@/features/assistant/presentation/components/elements/voice-recorder-bar";
 import { useVoiceRecorder } from "@/features/assistant/presentation/hooks/use-voice-recorder";
+import { useImageImporter } from "@/features/assistant/presentation/hooks/use-image-importer";
 
 type ProjectCanvasViewProps = {
   project: ProjectDetail;
@@ -70,28 +72,56 @@ export function ProjectCanvasView({
   const capabilities = deriveProjectCanvasCapabilities(currentProject.accessRole);
   const isAgentLocked = useAppStore((s) => s.isAgentLocked);
 
-  const [isAssistantOptionsOpen, setIsAssistantOptionsOpen] = useState(false);
-  const { isRecording, isSending, toggleRecording, cancelRecording } = useVoiceRecorder({
+  const handleRoleChanged = useCallback((accessRole: "OWNER" | "EDITOR" | "READER") => {
+    setCurrentProject((current) => ({ ...current, accessRole }));
+  }, []);
+
+  const { refreshSnapshot } = useDiagramRealtimeBridge({
     projectId: currentProject.id,
+    viewerId,
+    role: currentProject.accessRole as "OWNER" | "EDITOR" | "READER",
+    enabled: Boolean(viewerId),
+    onRoleChanged: handleRoleChanged,
   });
-  const canEdit = capabilities.canEditDiagram && !isAgentLocked && !isSending;
+
+  const handleAiSuccess = useCallback(() => {
+    void refreshSnapshot();
+  }, [refreshSnapshot]);
+
+  const [isAssistantOptionsOpen, setIsAssistantOptionsOpen] = useState(false);
+  const {
+    isRecording,
+    isSending: isVoiceSending,
+    barState,
+    startRecording,
+    stopAndSend,
+    cancelRecording,
+  } = useVoiceRecorder({
+    projectId: currentProject.id,
+    onSuccess: handleAiSuccess,
+  });
+
+  const {
+    isSending: isImageSending,
+    fileInputRef,
+    openFilePicker,
+    onFileInputChange,
+  } = useImageImporter({
+    projectId: currentProject.id,
+    onSuccess: handleAiSuccess,
+  });
+
+  const isAiProcessing = isAgentLocked || isVoiceSending || isImageSending;
+  const canEdit = capabilities.canEditDiagram && !isAiProcessing;
 
   const assistantVisualState: AssistantVisualState =
-    isAgentLocked || isSending
+    isAiProcessing
       ? "thinking"
       : isRecording
       ? "recording"
       : isAssistantOptionsOpen
       ? "options_open"
       : "idle";
-
-  useDiagramRealtimeBridge({
-    projectId: currentProject.id,
-    viewerId,
-    role: currentProject.accessRole as "OWNER" | "EDITOR" | "READER",
-    enabled: Boolean(viewerId),
-    onRoleChanged: (accessRole) => setCurrentProject((current) => ({ ...current, accessRole })),
-  });
 
   // Revalidación reactiva ante cambios de foco/visibilidad y 403/404
   useProjectAccessRevalidation({
@@ -241,20 +271,35 @@ export function ProjectCanvasView({
         <AgentOptionsDropdown
           isOpen={isAssistantOptionsOpen}
           onOpenChange={setIsAssistantOptionsOpen}
-          isRecording={isRecording}
-          onSelectVoice={toggleRecording}
-          onCancelVoice={cancelRecording}
-          disabled={!capabilities.canEditDiagram || isAgentLocked || isSending}
+          onSelectImage={() => {
+            setIsAssistantOptionsOpen(false);
+            openFilePicker();
+          }}
+          onSelectVoice={() => {
+            setIsAssistantOptionsOpen(false);
+            void startRecording();
+          }}
+          disabled={!capabilities.canEditDiagram || isAiProcessing}
         >
           <AgentTriggerButton
             state={assistantVisualState}
-            disabled={!capabilities.canEditDiagram || isAgentLocked || isSending}
+            disabled={!capabilities.canEditDiagram || isAiProcessing}
           />
         </AgentOptionsDropdown>
+
+        {/* Input oculto para carga de imágenes del diagrama */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={onFileInputChange}
+          accept="image/png,image/jpeg,image/jpg,image/webp"
+          className="hidden"
+          aria-hidden="true"
+        />
       </div>
 
       {/* Efecto perimetral de Auroras Boreales durante el bloqueo del agente */}
-      <AgentAuroraOverlay isLocked={isAgentLocked || isSending} />
+      <AgentAuroraOverlay isLocked={isAiProcessing} />
 
       {/* Encabezado flotante minimalista */}
       <header className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between py-3 px-5 pointer-events-none">
@@ -384,9 +429,17 @@ export function ProjectCanvasView({
           />
         </div>
 
-        {/* Centro: Píldora de orientación contextual */}
+        {/* Centro: Barra de grabación de voz O Píldora de orientación contextual */}
         <div className="flex-1 flex justify-center pointer-events-none">
-          <RelationGuidancePill />
+          {barState !== "idle" ? (
+            <VoiceRecorderBar
+              state={barState}
+              onCancel={cancelRecording}
+              onSend={() => void stopAndSend()}
+            />
+          ) : (
+            <RelationGuidancePill />
+          )}
         </div>
 
         {/* Derecha: Deshacer / Rehacer y Porcentaje de Zoom */}

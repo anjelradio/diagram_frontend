@@ -1,21 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { ChevronRight, SlidersHorizontal } from "lucide-react";
+import { useRef, useEffect } from "react";
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
 import {
   RELATION_PRESETS,
-  type DiagramCardinality,
   type RelationPreset,
 } from "@/features/diagram/domain/entities/diagram-relation.entity";
-
-const CARDINALITY_OPTIONS: readonly DiagramCardinality[] = [
-  "0..1",
-  "1",
-  "0..*",
-  "1..*",
-] as const;
 
 function getPresetIcon(preset: RelationPreset) {
   if (preset.badge) {
@@ -145,8 +137,7 @@ type RelationPickerPopoverProps = {
 
 /**
  * Panel desplegable de catálogo de relaciones UML y accesos directos Stitch.
- * Proporciona selección de presets asociativos, no asociativos y constructor de
- * asociación personalizada con multiplicidades libres.
+ * Proporciona selección de presets asociativos y no asociativos para el lienzo.
  */
 export function RelationPickerPopover({
   className,
@@ -156,10 +147,6 @@ export function RelationPickerPopover({
   const setRelationPickerOpen = useAppStore((s) => s.setRelationPickerOpen);
   const activeRelationPreset = useAppStore((s) => s.activeRelationPreset);
   const selectRelationPreset = useAppStore((s) => s.selectRelationPreset);
-
-  const [isCustomOpen, setIsCustomOpen] = useState(false);
-  const [customSource, setCustomSource] = useState<DiagramCardinality>("1");
-  const [customTarget, setCustomTarget] = useState<DiagramCardinality>("0..*");
 
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -191,19 +178,6 @@ export function RelationPickerPopover({
 
   const handleSelectPreset = (preset: RelationPreset) => {
     selectRelationPreset(preset);
-    onSelect?.();
-  };
-
-  const handleApplyCustom = () => {
-    const customPreset: RelationPreset = {
-      id: `custom-${customSource}-${customTarget}`,
-      label: `Asociación (${customSource}..${customTarget})`,
-      badge: `${customSource}..${customTarget}`,
-      relationType: "ASSOCIATION",
-      sourceCardinality: customSource,
-      targetCardinality: customTarget,
-    };
-    selectRelationPreset(customPreset);
     onSelect?.();
   };
 
@@ -275,78 +249,6 @@ export function RelationPickerPopover({
             </button>
           );
         })}
-
-        {/* Separador de asociación personalizada */}
-        <div className="pt-2 border-t border-white/10 my-1">
-          <button
-            type="button"
-            onClick={() => setIsCustomOpen((prev) => !prev)}
-            className="flex items-center justify-between w-full p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition text-xs font-medium"
-          >
-            <div className="flex items-center gap-2">
-              <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
-              <span>Asociación personalizada</span>
-            </div>
-            <ChevronRight
-              className={cn(
-                "w-3 h-3 transition-transform duration-150",
-                isCustomOpen && "rotate-90"
-              )}
-            />
-          </button>
-
-          {isCustomOpen && (
-            <div className="p-2.5 mt-1 bg-white/5 rounded-xl border border-white/10 flex flex-col gap-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex-1">
-                  <label className="text-[10px] text-slate-400 font-medium block mb-1">
-                    Origen
-                  </label>
-                  <select
-                    value={customSource}
-                    onChange={(e) =>
-                      setCustomSource(e.target.value as DiagramCardinality)
-                    }
-                    className="w-full bg-[#212224] text-xs text-white border border-white/15 rounded-lg px-2 py-1 outline-none focus:border-indigo-500 cursor-pointer"
-                  >
-                    {CARDINALITY_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex-1">
-                  <label className="text-[10px] text-slate-400 font-medium block mb-1">
-                    Destino
-                  </label>
-                  <select
-                    value={customTarget}
-                    onChange={(e) =>
-                      setCustomTarget(e.target.value as DiagramCardinality)
-                    }
-                    className="w-full bg-[#212224] text-xs text-white border border-white/15 rounded-lg px-2 py-1 outline-none focus:border-indigo-500 cursor-pointer"
-                  >
-                    {CARDINALITY_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleApplyCustom}
-                className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg transition active:scale-95 shadow cursor-pointer text-center"
-              >
-                Conectar ({customSource}..{customTarget})
-              </button>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

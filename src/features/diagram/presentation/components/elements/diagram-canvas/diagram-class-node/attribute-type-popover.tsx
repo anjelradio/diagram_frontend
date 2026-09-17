@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/popover";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
 import { diagramOperationQueueRepositoryImpl } from "@/features/diagram/infrastructure/storage/diagram-operation-queue.repository";
+import { sendRealtimeMessage } from "@/features/realtime/infrastructure/websocket/realtime-socket";
 import type {
   DiagramAttribute,
   DiagramAttributeDataType,
@@ -19,6 +20,7 @@ import type { UpdateAttributePayload } from "@/features/diagram/domain/entities/
 type AttributeTypePopoverProps = {
   classId: string;
   attribute: DiagramAttribute;
+  canEdit?: boolean;
 };
 
 const DATA_TYPES: {
@@ -44,15 +46,27 @@ const DATA_TYPES: {
 export const AttributeTypePopover = memo(function AttributeTypePopover({
   classId,
   attribute,
+  canEdit: canEditProp,
 }: AttributeTypePopoverProps) {
   const [open, setOpen] = useState(false);
 
   const projectId = useAppStore((s) => s.projectId);
   const viewerId = useAppStore((s) => s.viewerId);
-  const canEdit = useAppStore((s) => s.canEdit);
+  const storeCanEdit = useAppStore((s) => s.canEdit);
+  const classLock = useAppStore((s) => s.classLocks[classId]);
+  const isLockedByOther = Boolean(classLock && classLock.userId !== viewerId);
+  const canEdit = (canEditProp ?? storeCanEdit) && !isLockedByOther;
   const updateAttributeOptimistic = useAppStore(
     (s) => s.updateAttributeOptimistic
   );
+
+  const ensureClassLock = () => {
+    if (!canEdit) return;
+    const state = useAppStore.getState();
+    if (!state.classLocks[classId] || state.classLocks[classId]?.userId !== viewerId) {
+      sendRealtimeMessage({ type: "class_lock_acquire", class_id: classId });
+    }
+  };
 
   // La llave primaria es completamente inmutable
   if (attribute.isPrimaryKey) {
@@ -100,6 +114,7 @@ export const AttributeTypePopover = memo(function AttributeTypePopover({
   }
 
   const dispatchUpdate = async (patch: Partial<UpdateAttributePayload>) => {
+    ensureClassLock();
     // 1. Actualización optimista en el estado de React
     updateAttributeOptimistic(classId, attribute.id, {
       dataType: patch.dataType !== undefined ? patch.dataType : attribute.dataType,
@@ -142,12 +157,25 @@ export const AttributeTypePopover = memo(function AttributeTypePopover({
     dispatchUpdate({ isNullable: !attribute.isNullable });
   };
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      if (!canEdit) return;
+      ensureClassLock();
+    }
+    setOpen(nextOpen);
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <button
           type="button"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (canEdit) {
+              ensureClassLock();
+            }
+          }}
           className={cn(
             "flex items-center gap-0.5 font-mono text-[11px] px-1.5 py-0.5 rounded text-right transition-colors cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-indigo-400 nodrag nopan nowheel",
             attribute.dataType

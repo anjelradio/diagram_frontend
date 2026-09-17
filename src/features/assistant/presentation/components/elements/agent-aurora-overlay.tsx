@@ -11,72 +11,155 @@ interface AgentAuroraOverlayProps {
 export function AgentAuroraOverlay({ isLocked }: AgentAuroraOverlayProps) {
   if (!isLocked || typeof document === "undefined") return null;
 
-  return createPortal((
+  return createPortal(
     <div
-      className="fixed inset-0 pointer-events-none z-[100] overflow-hidden transition-opacity duration-500 animate-in fade-in"
+      className="fixed inset-0 pointer-events-none z-[100] overflow-hidden animate-in fade-in duration-700"
       aria-hidden="true"
     >
-      {/* Velos ondulantes: feedback de aurora real, no un marco estático. */}
-      <div className="agent-aurora-wave agent-aurora-wave-one" />
-      <div className="agent-aurora-wave agent-aurora-wave-two" />
-      <div className="agent-aurora-wave agent-aurora-wave-three" />
+      {/* Ondas horizontales en sentido horario + variación de altura sutil */}
+      <div className="aurora-stream aurora-stream-top" />
+      <div className="aurora-stream aurora-stream-bottom" />
+      <div className="aurora-stream aurora-stream-left" />
+      <div className="aurora-stream aurora-stream-right" />
 
-      {/* Píldora superior informativa flotante */}
-      <div className="absolute top-4 inset-x-0 flex justify-center pointer-events-none z-50">
-        <div className="flex items-center space-x-2 px-4 py-1.5 rounded-full bg-[#191a1d]/90 border border-cyan-500/40 text-cyan-200 shadow-2xl text-xs font-medium tracking-tight">
-          <Sparkles className="w-3.5 h-3.5 text-cyan-300 animate-spin motion-reduce:animate-none" />
-          <span>El Asistente IA está modificando el lienzo...</span>
+      {/* Velos de glow con pulso de altura */}
+      <div className="aurora-glow aurora-glow-top" />
+      <div className="aurora-glow aurora-glow-bottom" />
+
+      <div className="aurora-haze" />
+
+      <div className="absolute top-4 inset-x-0 flex justify-center z-50">
+        <div className="flex items-center space-x-2 px-4 py-1.5 rounded-full bg-[#191a1d]/92 border border-white/10 text-zinc-100 shadow-xl backdrop-blur-md text-xs font-medium tracking-tight">
+          <Sparkles className="w-3.5 h-3.5 text-cyan-300/90 animate-pulse motion-reduce:animate-none" />
+          <span>El Asistente IA está trabajando...</span>
         </div>
       </div>
+
       <style>{`
-        .agent-aurora-wave {
+        .aurora-stream {
           position: absolute;
-          left: -18%;
-          width: 136%;
-          height: 38vh;
-          border-radius: 48% 52% 42% 58%;
-          opacity: .42;
-          will-change: transform, opacity;
-          transform: translate3d(0, -8vh, 0) rotate(-4deg) skewX(-8deg);
-          background: linear-gradient(105deg, transparent 8%, rgba(45, 212, 191, .7) 28%, rgba(99, 102, 241, .72) 52%, rgba(217, 70, 239, .58) 72%, transparent 94%);
-          filter: blur(16px);
-          mix-blend-mode: screen;
           pointer-events: none;
+          will-change: transform;
+          mix-blend-mode: screen;
+          filter: blur(16px);
+          opacity: 0.64;
+          overflow: hidden;
         }
-        .agent-aurora-wave-one {
-          top: -12vh;
-          animation: agent-aurora-drift-one 9s ease-in-out infinite alternate;
+        .aurora-stream::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background-size: 200% 100%;
+          will-change: background-position, transform;
         }
-        .agent-aurora-wave-two {
-          top: 22vh;
-          opacity: .28;
-          transform: translate3d(0, -4vh, 0) rotate(5deg) skewX(10deg);
-          background: linear-gradient(100deg, transparent 4%, rgba(34, 211, 238, .62) 25%, rgba(129, 140, 248, .64) 54%, rgba(192, 132, 252, .5) 78%, transparent 96%);
-          animation: agent-aurora-drift-two 12s ease-in-out infinite alternate;
+        /* Superior: onda viaja izquierda -> derecha (horario) */
+        .aurora-stream-top {
+          top: 0; left: 0; right: 0; height: 18px;
         }
-        .agent-aurora-wave-three {
-          bottom: -18vh;
-          opacity: .3;
-          transform: translate3d(0, 5vh, 0) rotate(-7deg) skewX(-12deg);
-          background: linear-gradient(95deg, transparent 6%, rgba(20, 184, 166, .62) 26%, rgba(79, 70, 229, .64) 56%, rgba(236, 72, 153, .48) 80%, transparent 96%);
-          animation: agent-aurora-drift-three 11s ease-in-out infinite alternate;
+        .aurora-stream-top::before {
+          background: linear-gradient(90deg, transparent 0%, rgba(34,211,238,0.0) 8%, rgba(34,211,238,0.95) 22%, rgba(99,102,241,0.85) 44%, rgba(192,132,252,0.55) 64%, rgba(34,211,238,0.0) 92%, transparent 100%);
+          animation: aurora-slide-right 3.8s linear infinite, aurora-height-pulse 2.9s ease-in-out infinite alternate;
         }
-        @keyframes agent-aurora-drift-one {
-          from { transform: translate3d(-4vw, -6vh, 0) rotate(-6deg) skewX(-10deg); opacity: .28; }
-          to { transform: translate3d(5vw, 7vh, 0) rotate(3deg) skewX(-2deg); opacity: .5; }
+        /* Derecha: onda viaja arriba -> abajo (horario) */
+        .aurora-stream-right {
+          top: 0; right: 0; bottom: 0; width: 18px;
         }
-        @keyframes agent-aurora-drift-two {
-          from { transform: translate3d(5vw, -2vh, 0) rotate(7deg) skewX(12deg); opacity: .18; }
-          to { transform: translate3d(-5vw, 6vh, 0) rotate(-2deg) skewX(4deg); opacity: .38; }
+        .aurora-stream-right::before {
+          background: linear-gradient(180deg, transparent 0%, rgba(99,102,241,0.0) 8%, rgba(99,102,241,0.82) 22%, rgba(192,132,252,0.55) 46%, rgba(34,211,238,0.42) 68%, transparent 92%);
+          background-size: 100% 200%;
+          animation: aurora-slide-down 3.8s linear infinite 0.95s, aurora-width-pulse 2.9s ease-in-out infinite alternate 0.4s;
         }
-        @keyframes agent-aurora-drift-three {
-          from { transform: translate3d(-3vw, 4vh, 0) rotate(-9deg) skewX(-14deg); opacity: .2; }
-          to { transform: translate3d(4vw, -3vh, 0) rotate(1deg) skewX(-5deg); opacity: .4; }
+        /* Inferior: derecha -> izquierda (horario) */
+        .aurora-stream-bottom {
+          bottom: 0; left: 0; right: 0; height: 18px;
         }
+        .aurora-stream-bottom::before {
+          background: linear-gradient(270deg, transparent 0%, rgba(20,184,166,0.0) 8%, rgba(20,184,166,0.88) 22%, rgba(79,70,229,0.72) 46%, rgba(236,72,153,0.38) 68%, transparent 92%);
+          background-size: 200% 100%;
+          animation: aurora-slide-left 3.8s linear infinite 1.9s, aurora-height-pulse 2.9s ease-in-out infinite alternate 0.8s;
+        }
+        /* Izquierda: abajo -> arriba (horario) */
+        .aurora-stream-left {
+          top: 0; left: 0; bottom: 0; width: 18px;
+        }
+        .aurora-stream-left::before {
+          background: linear-gradient(0deg, transparent 0%, rgba(34,211,238,0.0) 8%, rgba(34,211,238,0.74) 22%, rgba(99,102,241,0.52) 48%, rgba(192,132,252,0.36) 70%, transparent 92%);
+          background-size: 100% 200%;
+          animation: aurora-slide-up 3.8s linear infinite 2.85s, aurora-width-pulse 2.9s ease-in-out infinite alternate 1.2s;
+        }
+
+        .aurora-glow {
+          position: absolute;
+          pointer-events: none;
+          will-change: transform, opacity;
+          mix-blend-mode: screen;
+          filter: blur(24px);
+          opacity: 0.26;
+        }
+        .aurora-glow-top {
+          top: 0; left: 2%; right: 2%; height: 14vh; max-height: 128px;
+          background:
+            radial-gradient(110% 100% at 24% 0%, rgba(34,211,238,0.38) 0%, transparent 62%),
+            radial-gradient(110% 100% at 62% 0%, rgba(99,102,241,0.32) 0%, transparent 60%),
+            radial-gradient(110% 100% at 86% 0%, rgba(192,132,252,0.20) 0%, transparent 62%),
+            linear-gradient(180deg, rgba(45,212,191,0.16), transparent 94%);
+          border-radius: 0 0 40% 40% / 0 0 100% 100%;
+          animation: aurora-glow-pulse 3.2s ease-in-out infinite alternate;
+        }
+        .aurora-glow-bottom {
+          bottom: 0; left: 2%; right: 2%; height: 13vh; max-height: 118px;
+          background:
+            radial-gradient(110% 100% at 32% 100%, rgba(20,184,166,0.30) 0%, transparent 62%),
+            radial-gradient(110% 100% at 70% 100%, rgba(79,70,229,0.26) 0%, transparent 60%),
+            radial-gradient(110% 100% at 88% 100%, rgba(236,72,153,0.14) 0%, transparent 62%),
+            linear-gradient(0deg, rgba(45,212,191,0.11), transparent 94%);
+          border-radius: 40% 40% 0 0 / 100% 100% 0 0;
+          animation: aurora-glow-pulse 3.2s ease-in-out infinite alternate-reverse;
+        }
+
+        .aurora-haze {
+          position: absolute;
+          inset: 0;
+          background: radial-gradient(70% 58% at 50% 18%, rgba(99,102,241,0.085), transparent 70%);
+          filter: blur(14px);
+          opacity: 0.95;
+        }
+
+        @keyframes aurora-slide-right {
+          0% { background-position: -100% 0%; transform: translateX(-2%); }
+          100% { background-position: 200% 0%; transform: translateX(2%); }
+        }
+        @keyframes aurora-slide-left {
+          0% { background-position: 200% 0%; transform: translateX(2%); }
+          100% { background-position: -100% 0%; transform: translateX(-2%); }
+        }
+        @keyframes aurora-slide-down {
+          0% { background-position: 0% -100%; transform: translateY(-2%); }
+          100% { background-position: 0% 200%; transform: translateY(2%); }
+        }
+        @keyframes aurora-slide-up {
+          0% { background-position: 0% 200%; transform: translateY(2%); }
+          100% { background-position: 0% -100%; transform: translateY(-2%); }
+        }
+        /* Variación sutil de altura (glow) */
+        @keyframes aurora-height-pulse {
+          0% { transform: scaleY(1) translateX(-1%); opacity: 0.9; }
+          100% { transform: scaleY(1.55) translateX(1%); opacity: 1; }
+        }
+        @keyframes aurora-width-pulse {
+          0% { transform: scaleX(1) translateY(-1%); opacity: 0.9; }
+          100% { transform: scaleX(1.55) translateY(1%); opacity: 1; }
+        }
+        @keyframes aurora-glow-pulse {
+          0% { transform: scaleY(0.92); opacity: 0.82; }
+          100% { transform: scaleY(1.18); opacity: 1; }
+        }
+
         @media (prefers-reduced-motion: reduce) {
-          .agent-aurora-wave { animation: none; transform: none; }
+          .aurora-stream::before, .aurora-glow { animation: none !important; }
         }
       `}</style>
-    </div>
-  ), document.body);
+    </div>,
+    document.body,
+  );
 }

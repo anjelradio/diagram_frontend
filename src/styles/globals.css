@@ -91,7 +91,11 @@
   .animate-glow-one,
   .animate-glow-two,
   .animate-glow-three,
-  .animate-marquee-pingpong {
+  .animate-marquee-pingpong,
+  .animate-relation-step-exit-down,
+  .animate-relation-step-enter-down,
+  .animate-relation-step-exit-up,
+  .animate-relation-step-enter-up {
     animation: none !important;
     transform: none !important;
   }
@@ -109,3 +113,65 @@
     transform: translate3d(0, 0, 0);
   }
 }
+
+/* Animaciones de transición entre pasos para la tarjeta de guía de relaciones UML */
+@keyframes relation-step-exit-down {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(0, 24px, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes relation-step-enter-down {
+  0% {
+    transform: translate3d(0, -24px, 0);
+    opacity: 0;
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes relation-step-exit-up {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(0, -24px, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes relation-step-enter-up {
+  0% {
+    transform: translate3d(0, 24px, 0);
+    opacity: 0;
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+.animate-relation-step-exit-down {
+  animation: relation-step-exit-down 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-relation-step-enter-down {
+  animation: relation-step-enter-down 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-relation-step-exit-up {
+  animation: relation-step-exit-up 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-relation-step-enter-up {
+  animation: relation-step-enter-up 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
