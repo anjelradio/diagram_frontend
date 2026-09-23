@@ -10,4 +10,3 @@ export type Invitation = {
 export type JoinProjectResult = {
   projectId: string;
 };
-

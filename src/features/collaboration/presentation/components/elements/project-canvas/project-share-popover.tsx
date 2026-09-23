@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
-import { createInvitationAction } from "@/features/projects/presentation/actions/invitation.action";
+import { createInvitationAction } from "@/features/collaboration/presentation/actions/invitation.action";
 
 type ProjectSharePopoverProps = {
   projectId: string;

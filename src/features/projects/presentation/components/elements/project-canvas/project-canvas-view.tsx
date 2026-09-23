@@ -3,17 +3,21 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   ArrowUpRight,
+  Loader2,
   Pencil,
   Sparkles,
 } from "lucide-react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
+import { useGenerateBackend } from "@/features/code-generation/presentation/hooks/use-generate-backend";
+import { useExportProject } from "@/features/projects/presentation/hooks/use-export-project";
+import { CODE_GENERATION_MESSAGES } from "@/features/code-generation/presentation/constants/code-generation.messages";
 import {
   ProjectAccessRole,
   type ProjectDetail,
 } from "@/features/projects/domain/entities/project.entity";
 import { deriveProjectCanvasCapabilities } from "@/features/projects/domain/services/project-canvas-capabilities";
-import type { ProjectMember } from "@/features/projects/domain/entities/project-member.entity";
+import type { ProjectMember } from "@/features/collaboration/domain/entities/project-member.entity";
 import type { DiagramSnapshot } from "@/features/diagram/domain/entities/diagram-class.entity";
 import {
   ProjectCanvasBottomControls,
@@ -27,8 +31,8 @@ import { DiagramSyncBadge } from "@/features/diagram/presentation/components/ele
 import { RelationGuidancePill } from "@/features/diagram/presentation/components/elements/diagram-canvas/relations/relation-guidance-pill";
 import { ProjectActionsMenu } from "./project-actions-menu";
 import { ProjectCommandDialog } from "./project-command-dialog";
-import { ProjectSharePopover } from "./project-share-popover";
-import { ProjectMembersPopover } from "./project-members-popover";
+import { ProjectSharePopover } from "@/features/collaboration/presentation/components/elements/project-canvas/project-share-popover";
+import { ProjectMembersPopover } from "@/features/collaboration/presentation/components/elements/project-canvas/project-members-popover";
 import { ProjectInformationPopover } from "./project-information-dialog";
 import { DeleteProjectDialog } from "./delete-project-dialog";
 import { useProjectAccessRevalidation } from "@/features/projects/presentation/hooks/use-project-access-revalidation";
@@ -136,6 +140,10 @@ export function ProjectCanvasView({
   const setActiveStoreTool = useAppStore((s) => s.setActiveTool);
   const cancelRelationCreation = useAppStore((s) => s.cancelRelationCreation);
 
+  const { generateSpringBoot, isGenerating: isGeneratingBackend } =
+    useGenerateBackend(currentProject.id);
+  const { exportProject, isExporting } = useExportProject(currentProject.id);
+
   const handleSelectTool = useCallback(
     (tool: CanvasTool) => {
       setActiveStoreTool(tool);
@@ -237,6 +245,15 @@ export function ProjectCanvasView({
         }
         return;
       }
+
+      // ⌘E / Ctrl+E: Exportar proyecto a archivo XMI
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "e") {
+        e.preventDefault();
+        if (capabilities.canExportOrGenerate) {
+          void exportProject();
+        }
+        return;
+      }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -252,7 +269,7 @@ export function ProjectCanvasView({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [canEdit, handleSelectTool]);
+  }, [canEdit, capabilities.canExportOrGenerate, exportProject, handleSelectTool]);
 
   return (
     <ReactFlowProvider>
@@ -314,6 +331,7 @@ export function ProjectCanvasView({
                 ? () => setIsDeleteOpen(true)
                 : undefined
             }
+            onExport={exportProject}
           />
 
           {capabilities.canEditProjectDetails ? (
@@ -364,26 +382,36 @@ export function ProjectCanvasView({
             <>
               <button
                 type="button"
-                onClick={() =>
-                  appToast.info("La generación de Backend estará disponible próximamente.")
-                }
-                className="hidden sm:flex items-center space-x-1.5 bg-[#191a1d] border border-white/10 text-white hover:bg-white/10 px-3.5 py-2 rounded-full text-xs font-medium shadow-lg transition active:scale-95 cursor-pointer"
-                title="Generar Backend"
+                onClick={() => generateSpringBoot()}
+                disabled={isGeneratingBackend}
+                className="hidden sm:flex items-center space-x-1.5 bg-[#191a1d] border border-white/10 text-white hover:bg-white/10 px-3.5 py-2 rounded-full text-xs font-medium shadow-lg transition active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title={CODE_GENERATION_MESSAGES.actions.generateBackend}
               >
-                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Generar Backend</span>
+                {isGeneratingBackend ? (
+                  <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                )}
+                <span>
+                  {isGeneratingBackend
+                    ? CODE_GENERATION_MESSAGES.loading.buttonGenerating
+                    : CODE_GENERATION_MESSAGES.actions.generateBackend}
+                </span>
               </button>
 
               <button
                 type="button"
-                onClick={() =>
-                  appToast.info("La exportación de diagramas estará disponible próximamente.")
-                }
-                className="hidden sm:flex items-center space-x-1.5 bg-[#191a1d] border border-white/10 text-white hover:bg-white/10 px-3.5 py-2 rounded-full text-xs font-medium shadow-lg transition active:scale-95 cursor-pointer"
-                title="Exportar"
+                onClick={() => exportProject()}
+                disabled={isExporting}
+                className="hidden sm:flex items-center space-x-1.5 bg-[#191a1d] border border-white/10 text-white hover:bg-white/10 px-3.5 py-2 rounded-full text-xs font-medium shadow-lg transition active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Exportar proyecto a XMI (Enterprise Architect)"
               >
-                <ArrowUpRight className="w-3.5 h-3.5 text-white" />
-                <span>Exportar</span>
+                {isExporting ? (
+                  <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                ) : (
+                  <ArrowUpRight className="w-3.5 h-3.5 text-white" />
+                )}
+                <span>{isExporting ? "Exportando..." : "Exportar"}</span>
               </button>
             </>
           )}

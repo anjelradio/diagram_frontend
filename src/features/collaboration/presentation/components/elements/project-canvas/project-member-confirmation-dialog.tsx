@@ -11,7 +11,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Loader2 } from "lucide-react";
-import type { ProjectMember } from "@/features/projects/domain/entities/project-member.entity";
+import type { ProjectMember } from "@/features/collaboration/domain/entities/project-member.entity";
 
 export type MemberActionType = "promote" | "demote" | "remove";
 

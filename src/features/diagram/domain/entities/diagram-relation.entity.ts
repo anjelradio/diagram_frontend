@@ -189,3 +189,14 @@ export function getDirectedRoles(
       return null;
   }
 }
+
+export function canBeSelfReferencing(relationType: DiagramRelationType): boolean {
+  return relationType === 'ASSOCIATION';
+}
+
+export function isSelfReferencingRelation(relation: {
+  source: { classId: string };
+  target: { classId: string };
+}): boolean {
+  return relation.source.classId === relation.target.classId;
+}

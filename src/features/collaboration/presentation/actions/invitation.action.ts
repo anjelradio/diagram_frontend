@@ -24,4 +24,3 @@ export async function joinProjectAction(
 ): Promise<ApiResult<JoinProjectResult>> {
   return invitationRepositoryImpl.join(code);
 }
-

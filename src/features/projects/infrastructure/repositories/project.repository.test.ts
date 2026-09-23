@@ -88,3 +88,74 @@ describe("ProjectRepository - getProject", () => {
     }
   });
 });
+
+describe("ProjectRepository - importProject and exportProject", () => {
+  it("expone los métodos importProject y exportProject en el contrato", () => {
+    const repo = createProjectRepository();
+    assert.equal(typeof repo.importProject, "function");
+    assert.equal(typeof repo.exportProject, "function");
+  });
+
+  it("importProject envía FormData al endpoint /projects/import y retorna el proyecto creado", async () => {
+    let capturedConfig: unknown = null;
+    const fakeFile = new File(["<xmi></xmi>"], "test.xmi", { type: "application/xml" });
+
+    const repo = createProjectRepository(
+      undefined,
+      undefined,
+      async (cfg) => {
+        capturedConfig = cfg;
+        const rawData = { id: "proj-imported-1", name: "Imported" };
+        const parsed = cfg.responseSchema.parse(rawData);
+        const mapped = cfg.mapData(parsed);
+        return { ok: true, data: mapped };
+      },
+    );
+
+    const res = await repo.importProject(fakeFile);
+    assert.equal(res.ok, true);
+    if (res.ok) {
+      assert.equal(res.data.id, "proj-imported-1");
+    }
+
+    const cfg = capturedConfig as { url: string; method: string; withAuth: boolean; body: FormData };
+    assert.ok(cfg.url.includes("/projects/import"));
+    assert.equal(cfg.method, "POST");
+    assert.equal(cfg.withAuth, true);
+    assert.ok(cfg.body.has("file"));
+  });
+
+  it("exportProject invoca apiRequestFile con GET a /projects/{id}/export y devuelve el archivo", async () => {
+    let capturedConfig: unknown = null;
+    const fakeBlob = new Blob(["<xml></xml>"], { type: "application/xml" });
+
+    const repo = createProjectRepository(
+      undefined,
+      undefined,
+      undefined,
+      async (cfg) => {
+        capturedConfig = cfg;
+        return {
+          ok: true,
+          data: {
+            fileName: "mi-proyecto.xmi",
+            contentType: "application/xml",
+            blob: fakeBlob,
+          },
+        };
+      },
+    );
+
+    const res = await repo.exportProject("proj-999");
+    assert.equal(res.ok, true);
+    if (res.ok) {
+      assert.equal(res.data.fileName, "mi-proyecto.xmi");
+      assert.equal(res.data.blob, fakeBlob);
+    }
+
+    const cfg = capturedConfig as { url: string; method: string; withAuth: boolean };
+    assert.ok(cfg.url.includes("/projects/proj-999/export"));
+    assert.equal(cfg.method, "GET");
+    assert.equal(cfg.withAuth, true);
+  });
+});

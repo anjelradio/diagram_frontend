@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, ImagePlus, RefreshCw, Search } from "lucide-react";
+import { AlertCircle, FileUp, RefreshCw, Search } from "lucide-react";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
 import { TextFormField } from "@/features/shared/presentation/components/forms/text-form-field";
 import type {
   ProjectListItem,
   ProjectTab,
 } from "../../../../domain/entities/project.entity";
+import { projectRepositoryImpl } from "../../../../infrastructure/repositories/project.repository";
 import { CreateProjectButton } from "../../forms/projects-list/create-project-button";
 import { ProjectCard } from "./project-card";
 import { ProjectFilterTabs } from "./project-filter-tabs";
@@ -25,8 +26,10 @@ type ProjectsViewProps = {
  */
 export function ProjectsView({ projects, errorMessage }: ProjectsViewProps) {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<ProjectTab>("owned");
   const [searchTerm, setSearchTerm] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
 
   const ownedCount = useMemo(
     () => projects.filter((p) => p.isOwner).length,
@@ -53,9 +56,31 @@ export function ProjectsView({ projects, errorMessage }: ProjectsViewProps) {
   }, [projects, activeTab, searchTerm]);
 
   const handleImportClick = () => {
-    appToast.info(
-      "Próximamente disponible: la digitalización de diagramas UML desde imagen estará disponible en una próxima versión.",
-    );
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    e.target.value = "";
+    setIsImporting(true);
+    appToast.info("Importando proyecto desde archivo...");
+
+    try {
+      const res = await projectRepositoryImpl.importProject(file);
+      if (res.ok) {
+        appToast.success("Proyecto importado exitosamente");
+        router.push(`/projects/${res.data.id}`);
+      } else {
+        const errorMsg = res.errors?.[0] || "No se pudo importar el proyecto.";
+        appToast.error("Error al importar", errorMsg);
+      }
+    } catch {
+      appToast.error("Error", "Error inesperado al importar el archivo.");
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   return (
@@ -76,12 +101,20 @@ export function ProjectsView({ projects, errorMessage }: ProjectsViewProps) {
           <button
             type="button"
             onClick={handleImportClick}
-            className="group relative inline-flex items-center gap-2 px-4 py-2.5 rounded-full border border-white/10 hover:border-indigo-500/40 bg-[#17181d]/80 hover:bg-[#1e1f24] text-slate-200 hover:text-white transition-all duration-200 shadow-sm active:scale-[0.98] text-sm font-medium cursor-pointer select-none"
-            title="Escanea y digitaliza un diagrama UML desde una imagen con IA"
+            disabled={isImporting}
+            className="group relative inline-flex items-center gap-2 px-4 py-2.5 rounded-full border border-white/10 hover:border-indigo-500/40 bg-[#17181d]/80 hover:bg-[#1e1f24] text-slate-200 hover:text-white transition-all duration-200 shadow-sm active:scale-[0.98] text-sm font-medium cursor-pointer select-none disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Importa un proyecto desde un archivo XML/XMI compatible con Enterprise Architect"
           >
-            <ImagePlus className="w-4 h-4 text-indigo-400 group-hover:text-indigo-300 transition-colors" />
-            <span>Importar desde Imagen</span>
+            <FileUp className="w-4 h-4 text-indigo-400 group-hover:text-indigo-300 transition-colors" />
+            <span>{isImporting ? "Importando..." : "Importar Proyecto"}</span>
           </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xml,.xmi"
+            className="hidden"
+            onChange={handleFileChange}
+          />
         </div>
       </section>
 

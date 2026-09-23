@@ -14,12 +14,12 @@ import { authClient } from "@/lib/auth-client";
 import type {
   ProjectCanvasCapabilities,
 } from "@/features/projects/domain/entities/project.entity";
-import type { ProjectMember } from "@/features/projects/domain/entities/project-member.entity";
+import type { ProjectMember } from "@/features/collaboration/domain/entities/project-member.entity";
 import {
   demoteMemberAction,
   promoteMemberAction,
   removeMemberAction,
-} from "@/features/projects/presentation/actions/project-member.action";
+} from "@/features/collaboration/presentation/actions/project-member.action";
 import {
   MemberActionType,
   ProjectMemberConfirmationDialog,

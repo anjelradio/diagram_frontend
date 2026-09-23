@@ -16,6 +16,7 @@ import {
   shouldRenderRelationName,
 } from "./diagram-relation-edge.utils";
 import { calculateEndpointOffsets } from "./relation-endpoint-offset";
+import { getSelfLoopPath } from "./relation-path-utils";
 import { RelationNameEditor } from "./relation-name-editor";
 
 function getCardinalityOffset(pos: Position) {
@@ -52,6 +53,8 @@ export const DiagramRelationEdge = memo(function DiagramRelationEdge({
   const relation = (data as DiagramRelationEdgeData | undefined)?.relation;
   const setSelectedRelationId = useAppStore((s) => s.setSelectedRelationId);
 
+  const isSelf = relation ? relation.source.classId === relation.target.classId : false;
+
   const {
     sourceX: effSourceX,
     sourceY: effSourceY,
@@ -69,15 +72,24 @@ export const DiagramRelationEdge = memo(function DiagramRelationEdge({
       })
     : { sourceX, sourceY, targetX, targetY };
 
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX: effSourceX,
-    sourceY: effSourceY,
-    sourcePosition,
-    targetX: effTargetX,
-    targetY: effTargetY,
-    targetPosition,
-    borderRadius: 8,
-  });
+  const [edgePath, labelX, labelY] = isSelf
+    ? getSelfLoopPath({
+        sourceX: effSourceX,
+        sourceY: effSourceY,
+        sourcePosition,
+        targetX: effTargetX,
+        targetY: effTargetY,
+        targetPosition,
+      })
+    : getSmoothStepPath({
+        sourceX: effSourceX,
+        sourceY: effSourceY,
+        sourcePosition,
+        targetX: effTargetX,
+        targetY: effTargetY,
+        targetPosition,
+        borderRadius: 8,
+      });
 
   if (!relation) {
     return (

@@ -2,11 +2,11 @@ import { notFound } from "next/navigation";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { projectRepositoryImpl } from "@/features/projects/infrastructure/repositories/project.repository";
-import { projectMemberRepositoryImpl } from "@/features/projects/infrastructure/repositories/project-member.repository";
+import { projectMemberRepositoryImpl } from "@/features/collaboration/infrastructure/repositories/project-member.repository";
 import { diagramRepositoryImpl } from "@/features/diagram/infrastructure/repositories/diagram.repository";
 import { assistantRepositoryImpl } from "@/features/assistant/infrastructure/repositories/http-assistant.repository";
 import { ProjectCanvasView } from "@/features/projects/presentation/components/elements/project-canvas/project-canvas-view";
-import type { ProjectMember } from "@/features/projects/domain/entities/project-member.entity";
+import type { ProjectMember } from "@/features/collaboration/domain/entities/project-member.entity";
 import type { AgentActivity } from "@/features/assistant/domain/entities/agent-activity.entity";
 
 type ProjectPageProps = {

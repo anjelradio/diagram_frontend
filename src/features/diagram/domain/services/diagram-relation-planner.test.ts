@@ -6,7 +6,9 @@ import {
   generateBridgeClassName,
   generateForeignKeyName,
   planRelationCreation,
+  resolveOptimalHandles,
 } from "./diagram-relation-planner.ts";
+
 
 describe("DiagramRelationPlanner Service", () => {
   const mockClassA: DiagramClassWithAttributes = {
@@ -158,6 +160,29 @@ describe("DiagramRelationPlanner Service", () => {
 
       assert.equal(planned.relation.name, "Escribe");
       assert.equal(planned.createRelationPayload.name, "Escribe");
+    });
+
+    it("planifica Asociación N:M recursiva generando FKs diferenciadas con _a_id y _b_id", () => {
+      idCounter = 1;
+      const planned = planRelationCreation({
+        relationType: "ASSOCIATION",
+        sourceClass: mockClassA,
+        targetClass: mockClassA,
+        sourceHandle: "RIGHT_TOP",
+        targetHandle: "RIGHT_BOTTOM",
+        sourceCardinality: "0..*",
+        targetCardinality: "0..*",
+        idGenerator: mockIdGen,
+      });
+
+      assert.equal(planned.materialization.strategy, "BRIDGE_CLASS");
+      assert.ok(planned.materialization.bridgeClass);
+      const fks = planned.materialization.bridgeClass.foreignAttributes;
+      assert.equal(fks.length, 2);
+      assert.equal(fks[0].name, "author_a_id");
+      assert.equal(fks[1].name, "author_b_id");
+      assert.equal(fks[0].referencedClassId, mockClassA.id);
+      assert.equal(fks[1].referencedClassId, mockClassA.id);
     });
 
     it("planifica Asociación 1:N colocando FK en el lado con máximo * y nombre 'Nueva relación'", () => {
@@ -318,5 +343,150 @@ describe("DiagramRelationPlanner Service", () => {
       assert.equal(fk.referencedClassId, mockClassB.id);
       assert.equal(fk.isNullable, true);
     });
+
+    it("planifica Asociación recursiva 1:N colocando FK nullable en la misma clase", () => {
+      idCounter = 1;
+      const planned = planRelationCreation({
+        relationType: "ASSOCIATION",
+        sourceClass: mockClassA,
+        targetClass: mockClassA,
+        sourceHandle: "RIGHT_TOP",
+        targetHandle: "RIGHT_BOTTOM",
+        sourceCardinality: "0..1",
+        targetCardinality: "0..*",
+        idGenerator: mockIdGen,
+      });
+
+      assert.equal(planned.relation.name, "Nueva relación");
+      assert.equal(planned.materialization.strategy, "FOREIGN_KEY");
+      assert.equal(planned.materialization.foreignAttributes.length, 1);
+      const fk = planned.materialization.foreignAttributes[0];
+      assert.equal(fk.classId, mockClassA.id);
+      assert.equal(fk.referencedClassId, mockClassA.id);
+      assert.equal(fk.isNullable, true);
+    });
+
+    it("planifica Asociación recursiva N:M creando clase puente con 2 FKs a la misma entidad", () => {
+      idCounter = 1;
+      const planned = planRelationCreation({
+        relationType: "ASSOCIATION",
+        sourceClass: mockClassA,
+        targetClass: mockClassA,
+        sourceHandle: "RIGHT_TOP",
+        targetHandle: "RIGHT_BOTTOM",
+        sourceCardinality: "0..*",
+        targetCardinality: "0..*",
+        idGenerator: mockIdGen,
+      });
+
+      assert.equal(planned.materialization.strategy, "BRIDGE_CLASS");
+      assert.ok(planned.materialization.bridgeClass);
+      const fks = planned.materialization.bridgeClass.foreignAttributes;
+      assert.equal(fks.length, 2);
+      assert.equal(fks[0].referencedClassId, mockClassA.id);
+      assert.equal(fks[1].referencedClassId, mockClassA.id);
+      assert.notEqual(fks[0].name, fks[1].name); // Nombres diferenciados
+    });
+  });
+
+  describe("resolveOptimalHandles", () => {
+    it("asigna handles distintos para relaciones auto-referenciadas en la misma clase", () => {
+      const { sourceHandle, targetHandle } = resolveOptimalHandles(
+        { x: 100, y: 100 },
+        { x: 100, y: 100 },
+        [],
+        "c_self",
+        "c_self"
+      );
+
+      assert.notEqual(sourceHandle, targetHandle, "Los handles de una auto-relación deben ser distintos");
+    });
+
+    it("asigna BOTTOM a la clase superior y TOP a la clase inferior cuando una está arriba de otra", () => {
+      // Producto arriba (y=100), Categoria abajo (y=400)
+      const { sourceHandle, targetHandle } = resolveOptimalHandles(
+        { x: 200, y: 100 },
+        { x: 200, y: 400 },
+        [],
+        "c_producto",
+        "c_categoria"
+      );
+
+      assert.ok(sourceHandle.startsWith("BOTTOM_"), `sourceHandle debió ser BOTTOM_*, fue: ${sourceHandle}`);
+      assert.ok(targetHandle.startsWith("TOP_"), `targetHandle debió ser TOP_*, fue: ${targetHandle}`);
+    });
+
+    it("asigna TOP a la clase inferior y BOTTOM a la clase superior cuando el origen está abajo", () => {
+      // Origen abajo (y=500), Destino arriba (y=100)
+      const { sourceHandle, targetHandle } = resolveOptimalHandles(
+        { x: 200, y: 500 },
+        { x: 200, y: 100 },
+        [],
+        "c_abajo",
+        "c_arriba"
+      );
+
+      assert.ok(sourceHandle.startsWith("TOP_"), `sourceHandle debió ser TOP_*, fue: ${sourceHandle}`);
+      assert.ok(targetHandle.startsWith("BOTTOM_"), `targetHandle debió ser BOTTOM_*, fue: ${targetHandle}`);
+    });
+
+    it("asigna RIGHT a la clase izquierda y LEFT a la clase derecha en disposición horizontal", () => {
+      const { sourceHandle, targetHandle } = resolveOptimalHandles(
+        { x: 100, y: 200 },
+        { x: 500, y: 200 },
+        [],
+        "c_izq",
+        "c_der"
+      );
+
+      assert.ok(sourceHandle.startsWith("RIGHT_"), `sourceHandle debió ser RIGHT_*, fue: ${sourceHandle}`);
+      assert.ok(targetHandle.startsWith("LEFT_"), `targetHandle debió ser LEFT_*, fue: ${targetHandle}`);
+    });
+
+    it("evita colisiones cuando múltiples relaciones parten de la misma clase hacia abajo", () => {
+      const existingRelations: any[] = [];
+      const srcId = "c_origen";
+
+      // Primera relación hacia abajo-izquierda
+      const rel1 = resolveOptimalHandles(
+        { x: 300, y: 100 },
+        { x: 100, y: 400 },
+        existingRelations,
+        srcId,
+        "c_dest1"
+      );
+      existingRelations.push({
+        source: { classId: srcId, handle: rel1.sourceHandle },
+        target: { classId: "c_dest1", handle: rel1.targetHandle },
+      });
+
+      // Segunda relación hacia abajo-derecha
+      const rel2 = resolveOptimalHandles(
+        { x: 300, y: 100 },
+        { x: 500, y: 400 },
+        existingRelations,
+        srcId,
+        "c_dest2"
+      );
+      existingRelations.push({
+        source: { classId: srcId, handle: rel2.sourceHandle },
+        target: { classId: "c_dest2", handle: rel2.targetHandle },
+      });
+
+      // Tercera relación directamente abajo
+      const rel3 = resolveOptimalHandles(
+        { x: 300, y: 100 },
+        { x: 300, y: 400 },
+        existingRelations,
+        srcId,
+        "c_dest3"
+      );
+
+      // Los 3 handles de origen deben ser distintos para no solaparse
+      const handles = new Set([rel1.sourceHandle, rel2.sourceHandle, rel3.sourceHandle]);
+      assert.equal(handles.size, 3, "Las 3 relaciones debieron usar handles diferentes en la clase origen");
+    });
   });
 });
+
+

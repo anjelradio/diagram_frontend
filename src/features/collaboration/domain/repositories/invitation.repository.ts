@@ -8,4 +8,3 @@ export interface InvitationRepository {
   createInvitation(projectId: string): Promise<ApiResult<Invitation>>;
   join(code: string): Promise<ApiResult<JoinProjectResult>>;
 }
-

@@ -318,7 +318,7 @@ export function projectDiagramOperation(
     const p = op.payload as RenameRelationPayload;
     const relId = op.relationId || p.relationId;
     const targetRel = relations.find((r) => r.id === relId);
-    if (targetRel && !targetRel.bridge) {
+    if (targetRel && !targetRel.bridge && targetRel.relationType === "ASSOCIATION") {
       targetRel.name = p.name;
     }
   } else if (op.kind === "DELETE_RELATION") {

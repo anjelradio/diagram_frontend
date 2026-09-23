@@ -26,6 +26,7 @@ type ProjectActionsMenuProps = {
   capabilities?: ProjectCanvasCapabilities;
   onOpenCommands: () => void;
   onOpenDelete?: () => void;
+  onExport?: () => void;
 };
 
 /**
@@ -38,6 +39,7 @@ export function ProjectActionsMenu({
   capabilities,
   onOpenCommands,
   onOpenDelete,
+  onExport,
 }: ProjectActionsMenuProps) {
   const canExport = capabilities ? capabilities.canExportOrGenerate : true;
   const canDuplicateOrDelete = capabilities
@@ -106,12 +108,16 @@ export function ProjectActionsMenu({
           <DropdownMenuSeparator className="bg-white/10 my-1" />
         )}
 
-        {/* Exportar (Próximamente) */}
+        {/* Exportar */}
         {canExport && (
           <DropdownMenuItem
-            onClick={() =>
-              appToast.info("La exportación de proyectos estará disponible próximamente.")
-            }
+            onClick={() => {
+              if (onExport) {
+                onExport();
+              } else {
+                appToast.info("La exportación de proyectos estará disponible próximamente.");
+              }
+            }}
             className="flex items-center justify-between py-2 px-2.5 rounded-xl hover:bg-white/5 focus:bg-white/5 data-[highlighted]:bg-white/5 transition cursor-pointer group text-slate-200 hover:text-white focus:text-white data-[highlighted]:text-white outline-none"
           >
             <div className="flex items-center gap-2.5 min-w-0">

@@ -25,4 +25,3 @@ export function mapJoinProjectToEntity(
     projectId: raw.project_id,
   };
 }
-

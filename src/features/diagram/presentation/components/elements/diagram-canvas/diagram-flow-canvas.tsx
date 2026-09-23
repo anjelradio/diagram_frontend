@@ -21,7 +21,11 @@ import { DiagramRelationEdge } from "./relations/diagram-relation-edge";
 import { ManyToManyRelationEdge } from "./relations/many-to-many-relation-edge";
 import { UmlRelationMarkers } from "./relations/uml-relation-markers";
 import { convertRelationsToEdges } from "./relations/diagram-relation-edge.utils";
-import { planRelationCreation } from "@/features/diagram/domain/services/diagram-relation-planner";
+import {
+  planRelationCreation,
+  resolveOptimalHandles,
+} from "@/features/diagram/domain/services/diagram-relation-planner";
+
 import {
   useAppStore,
 } from "@/features/shared/presentation/store/app-store";
@@ -181,26 +185,31 @@ export function DiagramFlowCanvas({
     }, 50);
   }, []);
 
-  // Validación de arista: rechazar autorrelación en la misma clase
+  // Validación de arista: permitir autorrelación únicamente para ASSOCIATION
   const isValidConnection = useCallback((connection: Edge | Connection) => {
     if (!connection.source || !connection.target) return false;
     if (connection.source === connection.target) {
-      appToast.error("Esta primera versión solo conecta clases distintas.");
-      return false;
+      const state = useAppStore.getState();
+      const preset = state.activeRelationPreset;
+      const custom = state.customRelationDraft;
+      const relType = preset?.relationType ?? (custom ? "ASSOCIATION" : null);
+
+      if (relType && relType !== "ASSOCIATION") {
+        appToast.error(
+          "Las relaciones recursivas (auto-referenciadas) solo están permitidas para el tipo de relación Asociación."
+        );
+        return false;
+      }
+      return true;
     }
     return true;
   }, []);
 
-  // Manejo de conexión completada entre handles de clases distintas
+  // Manejo de conexión completada entre handles
   const handleConnect = useCallback(
     async (connection: Connection) => {
       if (!canEdit || !projectId || !viewerId) return;
       if (!connection.source || !connection.target) return;
-
-      if (connection.source === connection.target) {
-        appToast.error("Esta primera versión solo conecta clases distintas.");
-        return;
-      }
 
       const state = useAppStore.getState();
       const preset = state.activeRelationPreset;
@@ -221,6 +230,15 @@ export function DiagramFlowCanvas({
       } else {
         appToast.error("Selecciona un tipo de relación antes de conectar.");
         return;
+      }
+
+      if (connection.source === connection.target) {
+        if (relationType !== "ASSOCIATION") {
+          appToast.error(
+            "Las relaciones recursivas (auto-referenciadas) solo están permitidas para el tipo de relación Asociación."
+          );
+          return;
+        }
       }
 
       // Invariante: una subclase solo puede ser origen de una GENERALIZATION activa
@@ -269,10 +287,34 @@ export function DiagramFlowCanvas({
         })
       );
 
-      const sourceHandle = (connection.sourceHandle ||
-        "RIGHT_CENTER") as DiagramRelationHandle;
-      const targetHandle = (connection.targetHandle ||
-        "LEFT_CENTER") as DiagramRelationHandle;
+      let sourceHandle = connection.sourceHandle as DiagramRelationHandle | undefined;
+      let targetHandle = connection.targetHandle as DiagramRelationHandle | undefined;
+
+      if (!sourceHandle || !targetHandle) {
+        const optimal = resolveOptimalHandles(
+          { x: sourceNode.position.x, y: sourceNode.position.y },
+          { x: targetNode.position.x, y: targetNode.position.y },
+          state.relations,
+          sourceNode.id,
+          targetNode.id
+        );
+        sourceHandle = sourceHandle || optimal.sourceHandle;
+        targetHandle = targetHandle || optimal.targetHandle;
+      }
+
+      if (sourceNode.id === targetNode.id && sourceHandle === targetHandle) {
+        const optimal = resolveOptimalHandles(
+          { x: sourceNode.position.x, y: sourceNode.position.y },
+          { x: targetNode.position.x, y: targetNode.position.y },
+          state.relations,
+          sourceNode.id,
+          targetNode.id
+        );
+        sourceHandle = optimal.sourceHandle;
+        targetHandle = optimal.targetHandle;
+      }
+
+
 
       const aggregate = planRelationCreation({
         sourceClass,

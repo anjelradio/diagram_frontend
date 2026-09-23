@@ -16,4 +16,3 @@ export const joinProjectResponseSchema = z.object({
 });
 
 export type JoinProjectResponse = z.infer<typeof joinProjectResponseSchema>;
-

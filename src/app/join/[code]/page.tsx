@@ -1,4 +1,4 @@
-import { ProjectJoinView } from "@/features/projects/presentation/components/elements/project-join/project-join-view";
+import { ProjectJoinView } from "@/features/collaboration/presentation/components/elements/project-join/project-join-view";
 
 type JoinPageProps = {
   params: Promise<{

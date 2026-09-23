@@ -192,7 +192,19 @@ export function planRelationCreation(
       isNullable: false,
     };
 
-    const fk1Name = generateForeignKeyName(params.sourceClass.name, []);
+    const isSelfRelation = params.sourceClass.id === params.targetClass.id;
+    const baseSnake = params.sourceClass.name
+      .trim()
+      .replace(/([A-Z])/g, "_$1")
+      .replace(/[\s-]+/g, "_")
+      .toLowerCase()
+      .replace(/^_+/, "")
+      .replace(/_+/g, "_");
+    const cleanBase = baseSnake.endsWith("_id") ? baseSnake.slice(0, -3) : baseSnake;
+
+    const fk1Name = isSelfRelation
+      ? `${cleanBase}_a_id`
+      : generateForeignKeyName(params.sourceClass.name, []);
     const fk1: ForeignAttributePayload = {
       id: fk1Id,
       classId: bridgeId,
@@ -206,7 +218,9 @@ export function planRelationCreation(
       relationId,
     };
 
-    const fk2Name = generateForeignKeyName(params.targetClass.name, [fk1Name]);
+    const fk2Name = isSelfRelation
+      ? `${cleanBase}_b_id`
+      : generateForeignKeyName(params.targetClass.name, [fk1Name]);
     const fk2: ForeignAttributePayload = {
       id: fk2Id,
       classId: bridgeId,
@@ -420,29 +434,35 @@ export function planRelationCreation(
     referencedClass = params.targetClass;
     isNullable = true;
   } else if (params.relationType === "ASSOCIATION") {
-    const srcMany =
-      params.sourceCardinality === "0..*" || params.sourceCardinality === "1..*";
-    const tgtMany =
-      params.targetCardinality === "0..*" || params.targetCardinality === "1..*";
-
-    if (srcMany && !tgtMany) {
+    if (params.sourceClass.id === params.targetClass.id) {
       receivingClass = params.sourceClass;
-      referencedClass = params.targetClass;
-      isNullable = params.targetCardinality === "0..1";
-    } else if (tgtMany && !srcMany) {
-      receivingClass = params.targetClass;
       referencedClass = params.sourceClass;
-      isNullable = params.sourceCardinality === "0..1";
+      isNullable = true;
     } else {
-      // 1:1
-      if (params.sourceClass.attributes.length > params.targetClass.attributes.length) {
+      const srcMany =
+        params.sourceCardinality === "0..*" || params.sourceCardinality === "1..*";
+      const tgtMany =
+        params.targetCardinality === "0..*" || params.targetCardinality === "1..*";
+
+      if (srcMany && !tgtMany) {
         receivingClass = params.sourceClass;
         referencedClass = params.targetClass;
         isNullable = params.targetCardinality === "0..1";
-      } else {
+      } else if (tgtMany && !srcMany) {
         receivingClass = params.targetClass;
         referencedClass = params.sourceClass;
         isNullable = params.sourceCardinality === "0..1";
+      } else {
+        // 1:1
+        if (params.sourceClass.attributes.length > params.targetClass.attributes.length) {
+          receivingClass = params.sourceClass;
+          referencedClass = params.targetClass;
+          isNullable = params.targetCardinality === "0..1";
+        } else {
+          receivingClass = params.targetClass;
+          referencedClass = params.sourceClass;
+          isNullable = params.sourceCardinality === "0..1";
+        }
       }
     }
   } else {
@@ -531,3 +551,175 @@ export function planRelationCreation(
     foreignKeyAttribute,
   };
 }
+
+/**
+ * Calcula los handles direccionales óptimos entre dos clases evitando colisiones y sobrecarga.
+ */
+export function resolveOptimalHandles(
+  sourcePos: { x: number; y: number },
+  targetPos: { x: number; y: number },
+  existingRelations?: DiagramRelation[],
+  sourceClassId?: string,
+  targetClassId?: string
+): { sourceHandle: DiagramRelationHandle; targetHandle: DiagramRelationHandle } {
+  const usage = new Map<string, number>();
+
+  if (existingRelations) {
+    for (const rel of existingRelations) {
+      const srcKey = `${rel.source.classId}:${rel.source.handle}`;
+      usage.set(srcKey, (usage.get(srcKey) ?? 0) + 1);
+
+      const tgtKey = `${rel.target.classId}:${rel.target.handle}`;
+      usage.set(tgtKey, (usage.get(tgtKey) ?? 0) + 1);
+
+      if (rel.bridge) {
+        const brKey = `${rel.bridge.classId}:${rel.bridge.handle}`;
+        usage.set(brKey, (usage.get(brKey) ?? 0) + 1);
+      }
+    }
+  }
+
+  // Caso auto-referenciado: seleccionar dos handles distintos de la misma clase con mínima ocupación
+  if (sourceClassId && targetClassId && sourceClassId === targetClassId) {
+    const pairCandidates: Array<[DiagramRelationHandle, DiagramRelationHandle]> = [
+      ["RIGHT_TOP", "RIGHT_BOTTOM"],
+      ["TOP_LEFT", "TOP_RIGHT"],
+      ["LEFT_TOP", "LEFT_BOTTOM"],
+      ["BOTTOM_LEFT", "BOTTOM_RIGHT"],
+      ["TOP_RIGHT", "RIGHT_TOP"],
+      ["RIGHT_BOTTOM", "BOTTOM_RIGHT"],
+      ["BOTTOM_LEFT", "LEFT_BOTTOM"],
+      ["LEFT_TOP", "TOP_LEFT"],
+    ];
+
+    let bestPair = pairCandidates[0];
+    let minCombinedUsage = Infinity;
+
+    for (const [h1, h2] of pairCandidates) {
+      const u1 = usage.get(`${sourceClassId}:${h1}`) ?? 0;
+      const u2 = usage.get(`${sourceClassId}:${h2}`) ?? 0;
+      const combined = u1 + u2;
+      if (combined === 0) {
+        return { sourceHandle: h1, targetHandle: h2 };
+      }
+      if (combined < minCombinedUsage) {
+        minCombinedUsage = combined;
+        bestPair = [h1, h2];
+      }
+    }
+    return { sourceHandle: bestPair[0], targetHandle: bestPair[1] };
+  }
+
+  // Centros aproximados asumiendo tarjetas de 240x140px
+  const srcCx = sourcePos.x + 120;
+  const srcCy = sourcePos.y + 70;
+  const tgtCx = targetPos.x + 120;
+  const tgtCy = targetPos.y + 70;
+
+  const dx = tgtCx - srcCx;
+  const dy = tgtCy - srcCy;
+
+  const pickBestHandle = (
+    classId: string | undefined,
+    relDx: number,
+    relDy: number
+  ): DiagramRelationHandle => {
+    let primaryCandidates: DiagramRelationHandle[];
+    let adjacentCandidate: DiagramRelationHandle | null = null;
+
+    if (Math.abs(relDy) > Math.abs(relDx)) {
+      if (relDy > 0) {
+        // Objetivo abajo -> Lado BOTTOM
+        if (relDx > 40) {
+          primaryCandidates = ["BOTTOM_RIGHT", "BOTTOM_CENTER", "BOTTOM_LEFT"];
+          adjacentCandidate = "RIGHT_BOTTOM";
+        } else if (relDx < -40) {
+          primaryCandidates = ["BOTTOM_LEFT", "BOTTOM_CENTER", "BOTTOM_RIGHT"];
+          adjacentCandidate = "LEFT_BOTTOM";
+        } else {
+          primaryCandidates = ["BOTTOM_CENTER", "BOTTOM_RIGHT", "BOTTOM_LEFT"];
+          adjacentCandidate = "RIGHT_BOTTOM";
+        }
+      } else {
+        // Objetivo arriba -> Lado TOP
+        if (relDx > 40) {
+          primaryCandidates = ["TOP_RIGHT", "TOP_CENTER", "TOP_LEFT"];
+          adjacentCandidate = "RIGHT_TOP";
+        } else if (relDx < -40) {
+          primaryCandidates = ["TOP_LEFT", "TOP_CENTER", "TOP_RIGHT"];
+          adjacentCandidate = "LEFT_TOP";
+        } else {
+          primaryCandidates = ["TOP_CENTER", "TOP_RIGHT", "TOP_LEFT"];
+          adjacentCandidate = "RIGHT_TOP";
+        }
+      }
+    } else {
+      if (relDx > 0) {
+        // Objetivo a la derecha -> Lado RIGHT
+        if (relDy > 30) {
+          primaryCandidates = ["RIGHT_BOTTOM", "RIGHT_CENTER", "RIGHT_TOP"];
+          adjacentCandidate = "BOTTOM_RIGHT";
+        } else if (relDy < -30) {
+          primaryCandidates = ["RIGHT_TOP", "RIGHT_CENTER", "RIGHT_BOTTOM"];
+          adjacentCandidate = "TOP_RIGHT";
+        } else {
+          primaryCandidates = ["RIGHT_CENTER", "RIGHT_BOTTOM", "RIGHT_TOP"];
+          adjacentCandidate = "BOTTOM_RIGHT";
+        }
+      } else {
+        // Objetivo a la izquierda -> Lado LEFT
+        if (relDy > 30) {
+          primaryCandidates = ["LEFT_BOTTOM", "LEFT_CENTER", "LEFT_TOP"];
+          adjacentCandidate = "BOTTOM_LEFT";
+        } else if (relDy < -30) {
+          primaryCandidates = ["LEFT_TOP", "LEFT_CENTER", "LEFT_BOTTOM"];
+          adjacentCandidate = "TOP_LEFT";
+        } else {
+          primaryCandidates = ["LEFT_CENTER", "LEFT_BOTTOM", "LEFT_TOP"];
+          adjacentCandidate = "BOTTOM_LEFT";
+        }
+      }
+    }
+
+    if (!classId) {
+      return primaryCandidates[0];
+    }
+
+    // 1. Buscar candidato con usage 0 en lado primario
+    for (const cand of primaryCandidates) {
+      if ((usage.get(`${classId}:${cand}`) ?? 0) === 0) {
+        return cand;
+      }
+    }
+
+    // 2. Intentar con esquina adyacente desocupada
+    if (adjacentCandidate && (usage.get(`${classId}:${adjacentCandidate}`) ?? 0) === 0) {
+      return adjacentCandidate;
+    }
+
+    // 3. Menor ocupación
+    let best = primaryCandidates[0];
+    let minOcc = usage.get(`${classId}:${best}`) ?? 0;
+    for (let i = 1; i < primaryCandidates.length; i++) {
+      const occ = usage.get(`${classId}:${primaryCandidates[i]}`) ?? 0;
+      if (occ < minOcc) {
+        best = primaryCandidates[i];
+        minOcc = occ;
+      }
+    }
+    return best;
+  };
+
+  const sourceHandle = pickBestHandle(sourceClassId, dx, dy);
+  if (sourceClassId) {
+    usage.set(`${sourceClassId}:${sourceHandle}`, (usage.get(`${sourceClassId}:${sourceHandle}`) ?? 0) + 1);
+  }
+
+  const targetHandle = pickBestHandle(targetClassId, -dx, -dy);
+  if (targetClassId) {
+    usage.set(`${targetClassId}:${targetHandle}`, (usage.get(`${targetClassId}:${targetHandle}`) ?? 0) + 1);
+  }
+
+  return { sourceHandle, targetHandle };
+}
+

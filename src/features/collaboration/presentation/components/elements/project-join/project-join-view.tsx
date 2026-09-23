@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
-import { joinProjectAction } from "@/features/projects/presentation/actions/invitation.action";
+import { joinProjectAction } from "@/features/collaboration/presentation/actions/invitation.action";
 
 type ProjectJoinViewProps = {
   code: string;

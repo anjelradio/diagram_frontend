@@ -18,6 +18,7 @@ import {
   getRelationEdgeVisuals,
   shouldRenderRelationName,
 } from "./diagram-relation-edge.utils";
+import { getSelfLoopPath } from "./relation-path-utils";
 import { RelationNameEditor } from "./relation-name-editor";
 
 function getCardinalityOffset(pos: Position) {
@@ -96,6 +97,7 @@ export const ManyToManyRelationEdge = memo(function ManyToManyRelationEdge({
 }: EdgeProps) {
   const edgeData = data as ManyToManyEdgeData | undefined;
   const relation = edgeData?.relation;
+  const isSelf = relation ? relation.source.classId === relation.target.classId : false;
   const bridgeClassId =
     edgeData?.bridgeClassId || relation?.bridge?.classId || "";
   const bridgeHandle =
@@ -104,16 +106,25 @@ export const ManyToManyRelationEdge = memo(function ManyToManyRelationEdge({
   const bridgeNode = useInternalNode(bridgeClassId);
   const setSelectedRelationId = useAppStore((s) => s.setSelectedRelationId);
 
-  // 1. Camino principal entre Source y Target
-  const [mainPath, centerX, centerY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-    borderRadius: 8,
-  });
+  // 1. Camino principal entre Source y Target (Loop si es reflexivo o SmoothStep si es normal)
+  const [mainPath, centerX, centerY] = isSelf
+    ? getSelfLoopPath({
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
+      })
+    : getSmoothStepPath({
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
+        borderRadius: 8,
+      });
 
   // 2. Rama perpendicular hacia la clase puente (formando la T)
   let branchPath = "";
