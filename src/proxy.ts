@@ -21,10 +21,12 @@ export async function proxy(request: NextRequest) {
   const isProjectsRoute =
     pathname === "/projects" || pathname.startsWith("/projects/");
   const isJoinRoute = pathname.startsWith("/join");
+  const isManualRoute =
+    pathname === "/manual" || pathname.startsWith("/manual/");
 
   // 1. Usuario no autenticado
   if (!isAuthenticated) {
-    if (isAuthRoute) {
+    if (isAuthRoute || isManualRoute) {
       return NextResponse.next();
     }
     const redirectUrl = new URL("/auth/login", request.url);
@@ -36,8 +38,8 @@ export async function proxy(request: NextRequest) {
   }
 
   // 2. Usuario autenticado
-  // Permitir acceso a la pantalla de unión de invitaciones
-  if (isJoinRoute) {
+  // Permitir acceso a la pantalla de unión de invitaciones o al manual de usuario
+  if (isJoinRoute || isManualRoute) {
     return NextResponse.next();
   }
 

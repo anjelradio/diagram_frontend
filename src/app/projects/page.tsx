@@ -2,6 +2,7 @@ import { AppHeader } from "@/features/shared/presentation/components/layout/app-
 import { InteractiveDotPattern } from "@/features/shared/presentation/components/layout/interactive-dot-pattern";
 import { projectRepositoryImpl } from "@/features/projects/infrastructure/repositories/project.repository";
 import { ProjectsView } from "@/features/projects/presentation/components/elements/projects-list/projects-view";
+import { ManualFloatingHelpButton } from "@/features/manual/presentation/components/elements/manual-floating-help-button";
 
 /**
  * Controlador para la página principal del catálogo de proyectos (/projects).
@@ -36,6 +37,9 @@ export default async function ProjectsPage() {
 
       {/* Contenido del catálogo */}
       <div className="relative z-10 flex-1 flex flex-col">{content}</div>
+
+      {/* Botón flotante accesible de ayuda y documentación */}
+      <ManualFloatingHelpButton />
     </div>
   );
 }

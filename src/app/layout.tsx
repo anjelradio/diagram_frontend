@@ -5,9 +5,9 @@ import { Toaster } from "sileo";
 import { appFontVariables } from "@/styles/fonts";
 
 export const metadata: Metadata = {
-  title: "next-scaffoldcito",
+  title: "Diagram - ERD With IA",
   description:
-    "Scaffold de Next.js con Better Auth, shadcn/ui y Clean Architecture",
+    "Crea y Disena tus bases de datos colaborativamente.",
 };
 
 export default function RootLayout({

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, HelpCircle } from "lucide-react";
 
 /**
  * Encabezado contextual para las rutas de autenticación.
@@ -94,7 +94,17 @@ export function AuthHeader() {
           </span>
         </Link>
 
-        {headerAction}
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          <Link
+            href="/manual"
+            className="w-9 h-9 rounded-full bg-[#17181d]/80 hover:bg-[#1e1f24] border border-white/10 hover:border-indigo-500/40 text-slate-300 hover:text-white transition-all duration-200 shadow-sm flex items-center justify-center active:scale-95 cursor-pointer"
+            title="Manual de Usuario y Documentación"
+            aria-label="Abrir manual de usuario y documentación"
+          >
+            <HelpCircle className="w-4 h-4" />
+          </Link>
+          {headerAction}
+        </div>
       </div>
     </header>
   );
