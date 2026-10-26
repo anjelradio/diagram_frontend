@@ -54,8 +54,8 @@ export function ProjectCanvasLoading() {
 
       {/* Barra inferior esqueleto */}
       <footer className="fixed bottom-6 left-0 right-0 z-30 px-5 flex items-center justify-between pointer-events-none">
-        {/* Izquierda: Registro de agente */}
-        <Skeleton className="h-8 w-36 rounded-full bg-[#191a1d] border border-white/10" />
+        {/* Izquierda: Espacio reservado para balance */}
+        <div className="flex-1" />
 
         {/* Derecha: Deshacer/rehacer y porcentaje de zoom */}
         <div className="flex items-center gap-2.5">

@@ -1,10 +1,8 @@
 import type { ApiResult } from "@/features/shared/domain/types/api-results";
 import {
-  apiRequestData,
   apiRequestFormData,
 } from "@/features/shared/infrastructure/http/api-client";
 import type {
-  AgentActivity,
   ImageCommandInput,
   ImageCommandResult,
   VoiceCommandInput,
@@ -12,12 +10,10 @@ import type {
 } from "../../domain/entities/agent-activity.entity";
 import type { AssistantRepository } from "../../domain/repositories/assistant.repository";
 import {
-  mapAgentActivityListToEntities,
   mapImageCommandResultToEntity,
   mapVoiceCommandResultToEntity,
 } from "../mappers/assistant.mapper";
 import {
-  agentActivityListResponseSchema,
   imageCommandResultWireSchema,
   voiceCommandResultWireSchema,
 } from "../schemas/assistant.schemas";
@@ -29,21 +25,9 @@ const apiBaseUrl = rawBackendUrl.endsWith("/api")
   : `${rawBackendUrl}/api`;
 
 const ASSISTANT_URL = `${apiBaseUrl}/assistant`;
-const PROJECTS_URL = `${apiBaseUrl}/projects`;
 
 export function createAssistantRepository(): AssistantRepository {
   return {
-    async listActivities(projectId: string): Promise<ApiResult<AgentActivity[]>> {
-      return apiRequestData({
-        url: `${PROJECTS_URL}/${projectId}/assistant/activities`,
-        method: "GET",
-        withAuth: true,
-        fallbackMessage:
-          "No se pudo cargar el historial de actividades del asistente.",
-        responseSchema: agentActivityListResponseSchema,
-        mapData: mapAgentActivityListToEntities,
-      });
-    },
 
     async sendVoiceCommand(
       input: VoiceCommandInput

@@ -133,17 +133,17 @@ export const RelationNameEditor = memo(function RelationNameEditor({
           onChange={(e) => setNameValue(e.target.value)}
           onBlur={handleCommit}
           onKeyDown={handleKeyDown}
-          className="bg-[#18191c]/95 border border-indigo-500 text-white text-[11px] font-medium px-2 py-0.5 rounded-full outline-none focus:ring-1 focus:ring-indigo-400 shadow-md nodrag nopan nowheel text-center min-w-[80px] max-w-[220px]"
+          className="bg-[#1b1c22]/95 border border-indigo-500 text-white text-[11px] font-medium px-2 py-1 rounded-md outline-none focus:ring-1 focus:ring-indigo-400 shadow-md nodrag nopan nowheel text-center min-w-[88px] max-w-[220px]"
           size={Math.max(8, nameValue.length + 2)}
         />
       ) : (
         <span
           className={cn(
-            "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium tracking-tight shadow-md select-none transition-all border",
+            "inline-flex items-center px-2 py-1 rounded-md text-[11px] font-medium tracking-tight shadow-sm select-none transition-colors border",
             isEffectiveDisabled ? "cursor-default opacity-80" : "cursor-pointer",
             isSelected
-              ? "bg-indigo-500/20 text-indigo-200 border-indigo-500/50 shadow-indigo-500/10 ring-1 ring-indigo-400/30"
-              : "bg-[#18191c]/95 text-slate-300 border-white/10 hover:border-white/20 hover:text-white"
+              ? "bg-indigo-500/15 text-indigo-100 border-indigo-400/60 ring-1 ring-indigo-400/25"
+              : "bg-[#1b1c22]/95 text-slate-300 border-white/10 hover:border-slate-400/60 hover:text-white"
           )}
           title={isEffectiveDisabled ? undefined : "Doble clic para renombrar"}
         >

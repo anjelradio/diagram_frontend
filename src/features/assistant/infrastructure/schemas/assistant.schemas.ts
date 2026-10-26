@@ -7,19 +7,6 @@ export const agentActivityStateWireSchema = z.enum([
   "CANCELLED",
 ]);
 
-export const agentActivityListItemWireSchema = z.object({
-  id: z.string(),
-  project_id: z.string(),
-  transcription: z.string().nullable().optional(),
-  resume: z.string().nullable().optional(),
-  image_url: z.string().nullable().optional(),
-  state: agentActivityStateWireSchema,
-  created_date: z.string(),
-});
-
-export const agentActivityListResponseSchema = z.array(
-  agentActivityListItemWireSchema
-);
 
 export const voiceCommandActionResultWireSchema = z.object({
   type: z.string(),
@@ -46,9 +33,6 @@ export const imageCommandResultWireSchema = z.object({
   actions: z.array(voiceCommandActionResultWireSchema).default([]),
 });
 
-export type AgentActivityListItemWire = z.infer<
-  typeof agentActivityListItemWireSchema
->;
 export type VoiceCommandResultWire = z.infer<
   typeof voiceCommandResultWireSchema
 >;

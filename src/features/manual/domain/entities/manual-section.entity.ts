@@ -1,4 +1,3 @@
-import type { ComponentType } from "react";
 
 /**
  * Identificadores únicos de sección para anclaje de scroll (Slugs).

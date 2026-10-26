@@ -144,6 +144,8 @@ export const DiagramRelationEdge = memo(function DiagramRelationEdge({
           stroke: visuals.stroke,
           strokeWidth: visuals.strokeWidth,
           strokeDasharray: visuals.strokeDasharray,
+          strokeLinecap: "round",
+          strokeLinejoin: "round",
         }}
         markerStart={visuals.markerStart}
         markerEnd={visuals.markerEnd}
@@ -159,7 +161,7 @@ export const DiagramRelationEdge = memo(function DiagramRelationEdge({
               transform: `translate(-50%, -50%) translate(${srcLabelPos.x}px,${srcLabelPos.y}px)`,
               pointerEvents: "none",
             }}
-            className="text-[10.5px] font-mono font-medium text-slate-300 bg-[#1e1f23]/90 px-1.5 py-0.5 rounded border border-white/10 shadow-sm backdrop-blur-sm select-none"
+            className="text-[10px] font-medium text-slate-300 bg-[#1b1c22]/95 px-1.5 py-0.5 rounded-md border border-white/10 shadow-sm backdrop-blur-sm select-none"
           >
             {cardinalities.source}
           </div>
@@ -173,7 +175,7 @@ export const DiagramRelationEdge = memo(function DiagramRelationEdge({
               transform: `translate(-50%, -50%) translate(${tgtLabelPos.x}px,${tgtLabelPos.y}px)`,
               pointerEvents: "none",
             }}
-            className="text-[10.5px] font-mono font-medium text-slate-300 bg-[#1e1f23]/90 px-1.5 py-0.5 rounded border border-white/10 shadow-sm backdrop-blur-sm select-none"
+            className="text-[10px] font-medium text-slate-300 bg-[#1b1c22]/95 px-1.5 py-0.5 rounded-md border border-white/10 shadow-sm backdrop-blur-sm select-none"
           >
             {cardinalities.target}
           </div>

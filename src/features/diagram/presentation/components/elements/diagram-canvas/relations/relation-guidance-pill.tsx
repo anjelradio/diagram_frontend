@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   ArrowRight,
   CheckCircle2,
@@ -8,10 +8,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
-import {
-  deriveRelationGuidance,
-  type RelationGuidancePhase,
-} from "@/features/diagram/domain/services/relation-guidance";
+import { deriveRelationGuidance } from "@/features/diagram/domain/services/relation-guidance";
 import type { RelationPreset } from "@/features/diagram/domain/entities/diagram-relation.entity";
 import { cn } from "@/lib/utils";
 
@@ -156,65 +153,46 @@ export function RelationGuidancePill(): React.JSX.Element | null {
     relationDraftSource
   );
 
-  const [step, setStep] = useState<1 | 2>(
-    guidance?.phase === "AWAITING_TARGET" ? 2 : 1
-  );
-  const [prevStep, setPrevStep] = useState<1 | 2 | null>(null);
-  const [direction, setDirection] = useState<"forward" | "backward">("forward");
+  const targetStep: 1 | 2 = guidance?.phase === "AWAITING_TARGET" ? 2 : 1;
+  const currentPresetId = activeRelationPreset?.id ?? null;
 
-  const prevPhaseRef = useRef<RelationGuidancePhase | null>(null);
-  const prevPresetIdRef = useRef<string | null>(null);
+  const [trackedPresetId, setTrackedPresetId] = useState<string | null>(currentPresetId);
+  const [transition, setTransition] = useState<{
+    step: 1 | 2;
+    prevStep: 1 | 2 | null;
+    direction: "forward" | "backward";
+  }>({
+    step: targetStep,
+    prevStep: null,
+    direction: "forward",
+  });
+
+  if (currentPresetId !== trackedPresetId) {
+    setTrackedPresetId(currentPresetId);
+    setTransition({
+      step: targetStep,
+      prevStep: null,
+      direction: "forward",
+    });
+  } else if (targetStep !== transition.step) {
+    const isForward = transition.step === 1 && targetStep === 2;
+    setTransition({
+      step: targetStep,
+      prevStep: transition.step,
+      direction: isForward ? "forward" : "backward",
+    });
+  }
 
   useEffect(() => {
-    if (!guidance || !activeRelationPreset) {
-      prevPhaseRef.current = null;
-      prevPresetIdRef.current = null;
-      setPrevStep(null);
-      return;
-    }
-
-    const currentPhase = guidance.phase;
-    const currentPresetId = activeRelationPreset.id;
-
-    // Si cambia el preset, reiniciamos el paso sin animación cruzada
-    if (prevPresetIdRef.current !== currentPresetId) {
-      prevPresetIdRef.current = currentPresetId;
-      prevPhaseRef.current = currentPhase;
-      setStep(currentPhase === "AWAITING_SOURCE" ? 1 : 2);
-      setPrevStep(null);
-      return;
-    }
-
-    // Transición de fase (Paso 1 <-> Paso 2)
-    if (prevPhaseRef.current && prevPhaseRef.current !== currentPhase) {
-      if (
-        prevPhaseRef.current === "AWAITING_SOURCE" &&
-        currentPhase === "AWAITING_TARGET"
-      ) {
-        // Avanzar al Paso 2: Paso 1 va hacia abajo y se desvanece; Paso 2 entra desde arriba
-        setPrevStep(1);
-        setStep(2);
-        setDirection("forward");
-      } else if (
-        prevPhaseRef.current === "AWAITING_TARGET" &&
-        currentPhase === "AWAITING_SOURCE"
-      ) {
-        // Retroceder al Paso 1: Paso 2 va hacia arriba y se desvanece; Paso 1 entra desde abajo
-        setPrevStep(2);
-        setStep(1);
-        setDirection("backward");
-      }
-      prevPhaseRef.current = currentPhase;
-
+    if (transition.prevStep !== null) {
       const timer = setTimeout(() => {
-        setPrevStep(null);
+        setTransition((prev) => ({ ...prev, prevStep: null }));
       }, 260);
       return () => clearTimeout(timer);
-    } else {
-      prevPhaseRef.current = currentPhase;
-      setStep(currentPhase === "AWAITING_SOURCE" ? 1 : 2);
     }
-  }, [guidance?.phase, activeRelationPreset?.id]);
+  }, [transition.prevStep]);
+
+  const { step, prevStep, direction } = transition;
 
   const handleBackToStep1 = useCallback(
     (e: React.MouseEvent) => {

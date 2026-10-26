@@ -8,7 +8,6 @@ import {
   Sparkles,
 } from "lucide-react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { appToast } from "@/features/shared/presentation/components/notifications/toast";
 import { useGenerateBackend } from "@/features/code-generation/presentation/hooks/use-generate-backend";
 import { useExportProject } from "@/features/projects/presentation/hooks/use-export-project";
 import { CODE_GENERATION_MESSAGES } from "@/features/code-generation/presentation/constants/code-generation.messages";
@@ -39,22 +38,15 @@ import { useProjectAccessRevalidation } from "@/features/projects/presentation/h
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
 import { useDiagramRealtimeBridge } from "@/features/diagram/presentation/hooks/use-diagram-realtime-bridge";
 import type {
-  AgentActivity,
   AssistantVisualState,
 } from "@/features/assistant/domain/entities/agent-activity.entity";
-import { AgentActivityTrigger } from "@/features/assistant/presentation/components/elements/agent-activity-trigger";
-import { AgentTriggerButton } from "@/features/assistant/presentation/components/elements/agent-trigger-button";
-import { AgentOptionsDropdown } from "@/features/assistant/presentation/components/elements/agent-options-dropdown";
-import { AgentAuroraOverlay } from "@/features/assistant/presentation/components/elements/agent-aurora-overlay";
-import { VoiceRecorderBar } from "@/features/assistant/presentation/components/elements/voice-recorder-bar";
-import { useVoiceRecorder } from "@/features/assistant/presentation/hooks/use-voice-recorder";
+import { AgentChatWidget } from "@/features/assistant/presentation/components/elements/chat/agent-chat-widget";
 import { useImageImporter } from "@/features/assistant/presentation/hooks/use-image-importer";
 
 type ProjectCanvasViewProps = {
   project: ProjectDetail;
   initialMembers?: ProjectMember[];
   initialSnapshot?: DiagramSnapshot;
-  initialActivities?: AgentActivity[];
   viewerId: string;
 };
 
@@ -67,7 +59,6 @@ export function ProjectCanvasView({
   project,
   initialMembers = [],
   initialSnapshot,
-  initialActivities = [],
   viewerId,
 }: ProjectCanvasViewProps) {
   const [currentProject, setCurrentProject] = useState<ProjectDetail>(project);
@@ -92,19 +83,6 @@ export function ProjectCanvasView({
     void refreshSnapshot();
   }, [refreshSnapshot]);
 
-  const [isAssistantOptionsOpen, setIsAssistantOptionsOpen] = useState(false);
-  const {
-    isRecording,
-    isSending: isVoiceSending,
-    barState,
-    startRecording,
-    stopAndSend,
-    cancelRecording,
-  } = useVoiceRecorder({
-    projectId: currentProject.id,
-    onSuccess: handleAiSuccess,
-  });
-
   const {
     isSending: isImageSending,
     fileInputRef,
@@ -115,16 +93,12 @@ export function ProjectCanvasView({
     onSuccess: handleAiSuccess,
   });
 
-  const isAiProcessing = isAgentLocked || isVoiceSending || isImageSending;
+  const isAiProcessing = isAgentLocked || isImageSending;
   const canEdit = capabilities.canEditDiagram && !isAiProcessing;
 
   const assistantVisualState: AssistantVisualState =
     isAiProcessing
       ? "thinking"
-      : isRecording
-      ? "recording"
-      : isAssistantOptionsOpen
-      ? "options_open"
       : "idle";
 
   // Revalidación reactiva ante cambios de foco/visibilidad y 403/404
@@ -283,26 +257,13 @@ export function ProjectCanvasView({
         }}
       />
 
-      {/* Botón flotante del Asistente IA (bajo el menú de 3 líneas) */}
-      <div className="fixed top-[58px] left-5 z-30 pointer-events-auto">
-        <AgentOptionsDropdown
-          isOpen={isAssistantOptionsOpen}
-          onOpenChange={setIsAssistantOptionsOpen}
-          onSelectImage={() => {
-            setIsAssistantOptionsOpen(false);
-            openFilePicker();
-          }}
-          onSelectVoice={() => {
-            setIsAssistantOptionsOpen(false);
-            void startRecording();
-          }}
-          disabled={!capabilities.canEditDiagram || isAiProcessing}
-        >
-          <AgentTriggerButton
-            state={assistantVisualState}
-            disabled={!capabilities.canEditDiagram || isAiProcessing}
-          />
-        </AgentOptionsDropdown>
+      {/* Widget expandible del Asistente IA (bajo el menú de 3 líneas) */}
+      <div className="fixed top-[58px] left-5 z-40 pointer-events-auto">
+        <AgentChatWidget
+          visualState={assistantVisualState}
+          canInteract={capabilities.canEditDiagram && !isAiProcessing}
+          onImageSelect={openFilePicker}
+        />
 
         {/* Input oculto para carga de imágenes del diagrama */}
         <input
@@ -314,9 +275,6 @@ export function ProjectCanvasView({
           aria-hidden="true"
         />
       </div>
-
-      {/* Efecto perimetral de Auroras Boreales durante el bloqueo del agente */}
-      <AgentAuroraOverlay isLocked={isAiProcessing} />
 
       {/* Encabezado flotante minimalista */}
       <header className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between py-3 px-5 pointer-events-none">
@@ -449,25 +407,12 @@ export function ProjectCanvasView({
 
       {/* Pie de controles flotantes con distribución estable en 3 columnas */}
       <footer className="fixed bottom-6 left-0 right-0 z-30 px-5 flex items-center justify-between pointer-events-none">
-        {/* Izquierda: Registro de agente */}
-        <div className="flex-1 flex justify-start">
-          <AgentActivityTrigger
-            projectId={currentProject.id}
-            initialActivities={initialActivities}
-          />
-        </div>
+        {/* Izquierda: Espacio reservado para balance de 3 columnas */}
+        <div className="flex-1 flex justify-start" />
 
-        {/* Centro: Barra de grabación de voz O Píldora de orientación contextual */}
+        {/* Centro: Píldora de orientación contextual */}
         <div className="flex-1 flex justify-center pointer-events-none">
-          {barState !== "idle" ? (
-            <VoiceRecorderBar
-              state={barState}
-              onCancel={cancelRecording}
-              onSend={() => void stopAndSend()}
-            />
-          ) : (
-            <RelationGuidancePill />
-          )}
+          <RelationGuidancePill />
         </div>
 
         {/* Derecha: Deshacer / Rehacer y Porcentaje de Zoom */}

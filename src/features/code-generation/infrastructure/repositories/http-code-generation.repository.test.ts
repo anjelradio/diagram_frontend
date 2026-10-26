@@ -8,7 +8,7 @@ import {
 
 describe("HttpCodeGenerationRepository", () => {
   it("construye la petición al endpoint de generación con los parámetros correctos", async () => {
-    let capturedConfig: any = null;
+    let capturedConfig: Parameters<FileRequester>[0] = {} as Parameters<FileRequester>[0];
 
     const mockRequester: FileRequester = async (cfg) => {
       capturedConfig = cfg;
@@ -30,10 +30,10 @@ describe("HttpCodeGenerationRepository", () => {
     });
 
     assert.equal(result.ok, true);
-    assert.ok(capturedConfig.url.includes("/code-generation/projects/proj-123/spring-boot"));
-    assert.equal(capturedConfig.method, "POST");
-    assert.equal(capturedConfig.withAuth, true);
-    assert.deepEqual(capturedConfig.body, {
+    assert.ok(capturedConfig?.url.includes("/code-generation/projects/proj-123/spring-boot"));
+    assert.equal(capturedConfig?.method, "POST");
+    assert.equal(capturedConfig?.withAuth, true);
+    assert.deepEqual(capturedConfig?.body, {
       package_name: "com.test.app",
       artifact_id: "test-app",
       database_name: "test_db",
@@ -45,7 +45,7 @@ describe("HttpCodeGenerationRepository", () => {
     let clicked = false;
     let createdUrl = "";
 
-    (globalThis as any).window = {
+    (globalThis as unknown as Record<string, unknown>).window = {
       URL: {
         createObjectURL: () => {
           createdUrl = "blob:mock-url";
@@ -56,7 +56,7 @@ describe("HttpCodeGenerationRepository", () => {
     };
 
     const origDocument = globalThis.document;
-    (globalThis as any).document = {
+    (globalThis as unknown as Record<string, unknown>).document = {
       createElement: () => ({
         style: {},
         click: () => {
@@ -75,8 +75,8 @@ describe("HttpCodeGenerationRepository", () => {
       assert.equal(clicked, true);
       assert.equal(createdUrl, "blob:mock-url");
     } finally {
-      (globalThis as any).window = origWindow;
-      (globalThis as any).document = origDocument;
+      (globalThis as unknown as Record<string, unknown>).window = origWindow;
+      (globalThis as unknown as Record<string, unknown>).document = origDocument;
     }
   });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import type { AssistantVisualState } from "../../../domain/entities/agent-activity.entity";
+import type { AssistantVisualState } from "@/features/assistant/domain/entities/agent-activity.entity";
 import { cn } from "@/lib/utils";
 
 export interface AgentTriggerButtonProps
@@ -33,7 +33,7 @@ export const AgentTriggerButton = React.forwardRef<
       type={type}
       disabled={disabled}
       className={cn(
-        "w-14 h-14 rounded-2xl bg-[#1e1f23] border border-zinc-700/80 text-white hover:bg-[#282a2f] hover:border-zinc-500/80 shadow-2xl flex items-center justify-center p-1.5 transition active:scale-95 cursor-pointer select-none overflow-hidden",
+        "w-14 h-14 max-w-14 max-h-14 rounded-2xl bg-[#191a1d] border border-zinc-700/80 text-white hover:bg-[#212327] hover:border-zinc-500/80 shadow-2xl flex items-center justify-center p-1.5 transition active:scale-95 cursor-pointer select-none overflow-hidden flex-shrink-0",
         state === "thinking" && "ring-2 ring-indigo-500 animate-pulse",
         state === "recording" && "ring-2 ring-rose-500",
         disabled && "opacity-50 cursor-not-allowed",
@@ -49,7 +49,7 @@ export const AgentTriggerButton = React.forwardRef<
         alt="Estado del Asistente IA"
         width={46}
         height={46}
-        className="w-full h-full object-contain pointer-events-none select-none"
+        className="w-10 h-10 max-w-[46px] max-h-[46px] object-contain pointer-events-none select-none"
       />
     </button>
   );

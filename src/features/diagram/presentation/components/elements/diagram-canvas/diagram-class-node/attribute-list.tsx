@@ -156,20 +156,10 @@ export const AttributeList = memo(function AttributeList({
   };
 
   return (
-    <div className="pt-1 select-none">
-      {/* Divisor estético entre cabecera y atributos */}
-      <div className="border-t border-white/10 mb-1.5" />
-
-      {/* Título de sección de atributos y contador */}
-      <div className="px-1 pb-1 flex items-center justify-between text-[10px] font-semibold text-slate-400 tracking-wider uppercase select-none">
-        <span>Atributos</span>
-        <span className="text-[9px] font-mono text-slate-500 font-normal">
-          ({sortedAttributes.length})
-        </span>
-      </div>
+    <div className="pt-1 select-none border-t border-white/10">
 
       {/* Filas de atributos */}
-      <div className="space-y-0.5">
+      <div className="space-y-px py-1">
         {/* Fila fija e inamovible de la Llave Primaria (PK) */}
         {pkAttribute && (
           <AttributeRow
@@ -224,7 +214,7 @@ export const AttributeList = memo(function AttributeList({
         )}
 
         {sortedAttributes.length === 0 && (
-          <div className="text-[11px] text-slate-500 italic px-2 py-1 select-none">
+          <div className="text-[11px] text-slate-500 italic px-2.5 py-2 select-none">
             Sin atributos
           </div>
         )}

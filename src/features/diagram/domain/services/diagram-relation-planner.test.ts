@@ -1,6 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { DiagramClassWithAttributes } from "../entities/diagram-class.entity.ts";
+import type {
+  DiagramRelation,
+  DiagramRelationHandle,
+} from "../entities/diagram-relation.entity.ts";
 import {
   calculateBridgeClassPosition,
   generateBridgeClassName,
@@ -444,14 +448,17 @@ describe("DiagramRelationPlanner Service", () => {
     });
 
     it("evita colisiones cuando múltiples relaciones parten de la misma clase hacia abajo", () => {
-      const existingRelations: any[] = [];
+      const existingRelations: Array<{
+        source: { classId: string; handle: DiagramRelationHandle };
+        target: { classId: string; handle: DiagramRelationHandle };
+      }> = [];
       const srcId = "c_origen";
 
       // Primera relación hacia abajo-izquierda
       const rel1 = resolveOptimalHandles(
         { x: 300, y: 100 },
         { x: 100, y: 400 },
-        existingRelations,
+        existingRelations as unknown as DiagramRelation[],
         srcId,
         "c_dest1"
       );
@@ -464,7 +471,7 @@ describe("DiagramRelationPlanner Service", () => {
       const rel2 = resolveOptimalHandles(
         { x: 300, y: 100 },
         { x: 500, y: 400 },
-        existingRelations,
+        existingRelations as unknown as DiagramRelation[],
         srcId,
         "c_dest2"
       );
@@ -477,7 +484,7 @@ describe("DiagramRelationPlanner Service", () => {
       const rel3 = resolveOptimalHandles(
         { x: 300, y: 100 },
         { x: 300, y: 400 },
-        existingRelations,
+        existingRelations as unknown as DiagramRelation[],
         srcId,
         "c_dest3"
       );

@@ -92,13 +92,13 @@ export const DiagramClassNode = memo(function DiagramClassNode({
   return (
     <div
       className={cn(
-        "group relative min-w-[220px] max-w-[320px] bg-[#17181d]/95 backdrop-blur-md rounded-xl border transition-all duration-150 select-none shadow-xl p-3",
+        "group relative min-w-[236px] max-w-[336px] bg-[#17181d]/95 backdrop-blur-md rounded-xl border transition-[border-color,box-shadow] duration-150 select-none shadow-[0_8px_18px_rgba(0,0,0,0.2)] p-2",
         canEditClass ? "cursor-move" : "cursor-default",
         selected
-          ? "border-indigo-500 ring-2 ring-indigo-500/40 shadow-indigo-500/20"
+          ? "border-indigo-500 ring-2 ring-indigo-500/40"
           : classLock && classLock.userId !== viewerId
-            ? "border-amber-400/80 ring-2 ring-amber-400/20 shadow-amber-400/20"
-          : "border-white/10 hover:border-white/20 shadow-black/60"
+            ? "border-amber-400/80 ring-2 ring-amber-400/20"
+          : "border-white/10 hover:border-white/20"
       )}
       role="region"
       aria-label={`Clase ${data.name}`}
@@ -106,7 +106,7 @@ export const DiagramClassNode = memo(function DiagramClassNode({
       {classLock && classLock.userId !== viewerId && (
         <ClassLockIndicator userName={classLock.userName} color={classLock.color} />
       )}
-      {/* Cabecera con ícono de clase y nombre */}
+      {/* Cabecera de la entidad */}
       <ClassNodeHeader
         classId={id}
         name={data.name}

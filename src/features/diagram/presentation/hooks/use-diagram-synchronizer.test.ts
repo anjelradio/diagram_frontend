@@ -194,6 +194,7 @@ describe("useDiagramSynchronizer - Transiciones y bloqueo de cola", () => {
     let initializedProjectKey: string | null = null;
 
     const simulateEffect = (projectId: string, viewerId: string, canEdit: boolean) => {
+      void canEdit;
       const projectKey = `${projectId}:${viewerId}`;
       if (initializedProjectKey === projectKey) return;
       initializedProjectKey = projectKey;

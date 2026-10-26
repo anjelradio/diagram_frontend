@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useRef, useState, useEffect } from "react";
-import { KeyRound, GripVertical } from "lucide-react";
+import { GripVertical, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DiagramAttribute } from "@/features/diagram/domain/entities/diagram-attribute.entity";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
@@ -188,10 +188,10 @@ export const AttributeRow = memo(function AttributeRow({
         }
       }}
       className={cn(
-        "group/attr flex items-center justify-between text-xs py-1.5 px-2 rounded-lg transition-colors select-none",
+        "group/attr flex items-center justify-between text-xs py-1.5 px-2.5 rounded-md transition-colors select-none",
         isRowSelected
-          ? "bg-indigo-500/20 ring-1 ring-indigo-500/50"
-          : canEdit ? "hover:bg-white/5" : "",
+          ? "bg-indigo-500/15 ring-1 ring-inset ring-indigo-500/45"
+          : canEdit ? "hover:bg-white/[0.045]" : "",
         capabilities.canRename || capabilities.canDelete ? "cursor-pointer" : "cursor-default"
       )}
       role="row"
@@ -206,8 +206,8 @@ export const AttributeRow = memo(function AttributeRow({
         }
       }}
     >
-      {/* Zona izquierda: Grip / Icono PK / Badge FK y Nombre */}
-      <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+      {/* Zona izquierda: estado de clave y nombre */}
+      <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-3">
         {isPk ? (
           <span
             title={
@@ -215,22 +215,46 @@ export const AttributeRow = memo(function AttributeRow({
                 ? "Llave primaria compartida (UUID inmutable por generalización)"
                 : "Llave primaria (UUID inmutable)"
             }
-            className="inline-flex items-center gap-1 text-[9px] font-sans font-semibold text-amber-400 bg-amber-400/10 border border-amber-400/30 px-1.5 py-0.5 rounded flex-shrink-0 select-none shadow-sm"
+            className={cn(
+              "inline-flex h-[18px] items-center justify-center gap-1 rounded-md px-1.5 text-[9px] font-sans font-semibold tracking-[-0.01em] flex-shrink-0 select-none shadow-sm",
+              isFk && isPk
+                ? "text-slate-100 shadow-violet-950/20"
+                : isFk
+                  ? "bg-indigo-500/30 text-indigo-300 shadow-indigo-950/20"
+                  : "bg-orange-500/30 text-amber-300 shadow-orange-950/20"
+            )}
+            style={
+              isFk && isPk
+                ? {
+                    background:
+                      "linear-gradient(90deg, rgb(249 115 22 / 0.3) 0%, rgb(129 140 248 / 0.3) 100%)",
+                  }
+                : undefined
+            }
           >
-            <KeyRound className="w-2.5 h-2.5" />
-            <span>{isFk ? "PK / FK" : "PK"}</span>
+            <KeyRound className="h-2.5 w-2.5" strokeWidth={2} />
+            {isFk ? (
+              <span>
+                <span className="text-amber-300">PK</span>
+                <span className="text-slate-400"> / </span>
+                <span className="text-indigo-300">FK</span>
+              </span>
+            ) : (
+              <span>PK</span>
+            )}
           </span>
         ) : isFk ? (
           <span
             title="Llave foránea secundaria (inmutable salvo nombre)"
-            className="inline-flex items-center gap-1 text-[9px] font-sans font-semibold text-indigo-400 bg-indigo-400/10 border border-indigo-400/30 px-1.5 py-0.5 rounded flex-shrink-0 select-none shadow-sm"
+            className="inline-flex h-[18px] items-center justify-center gap-1 rounded-md bg-indigo-500/30 px-1.5 text-[9px] font-sans font-semibold tracking-[-0.01em] text-indigo-300 flex-shrink-0 select-none shadow-sm shadow-indigo-950/20"
           >
+            <KeyRound className="h-2.5 w-2.5" strokeWidth={2} />
             <span>FK</span>
           </span>
         ) : capabilities.canReposition ? (
           <button
             type="button"
-            className="text-slate-500 group-hover/attr:text-slate-300 transition-colors flex-shrink-0 cursor-grab active:cursor-grabbing p-0.5 -ml-1 nodrag touch-none"
+            className="text-slate-600 group-hover/attr:text-slate-400 transition-colors flex-shrink-0 cursor-grab active:cursor-grabbing p-0.5 -ml-1 nodrag touch-none"
             aria-label={`Reordenar atributo ${attribute.name}`}
             {...dragHandleProps}
           >
@@ -261,7 +285,7 @@ export const AttributeRow = memo(function AttributeRow({
                   handleCancel();
                 }
               }}
-              className="w-full bg-white/10 border border-indigo-500 text-white font-mono text-xs px-1.5 py-0.5 rounded outline-none focus:ring-1 focus:ring-indigo-400 nodrag nopan nowheel"
+            className="w-full bg-white/10 border border-indigo-500 text-white text-xs px-1.5 py-0.5 rounded-md outline-none focus:ring-1 focus:ring-indigo-400 nodrag nopan nowheel"
             />
           ) : (
             <span
@@ -292,19 +316,19 @@ export const AttributeRow = memo(function AttributeRow({
                     }
               }
               className={cn(
-                "font-mono text-xs inline-block transition-colors select-none",
+                "text-xs inline-block transition-colors select-none",
                 isMarqueeActive
                   ? "whitespace-nowrap max-w-none animate-marquee-pingpong"
                   : "truncate max-w-full block",
                 isPk
-                  ? "text-amber-200/90 font-semibold cursor-default"
+                  ? "text-slate-100 font-semibold cursor-default"
                   : isFk
                     ? capabilities.canRename
-                      ? "text-indigo-200/90 font-medium hover:text-indigo-100 cursor-pointer"
-                      : "text-indigo-200/90 font-medium cursor-default"
+                      ? "text-slate-100 font-medium hover:text-indigo-100 cursor-pointer"
+                      : "text-slate-100 font-medium cursor-default"
                     : capabilities.canRename
-                      ? "text-slate-200 font-medium hover:text-indigo-200 cursor-pointer"
-                      : "text-slate-200 font-medium cursor-default"
+                      ? "text-slate-200 hover:text-white cursor-pointer"
+                      : "text-slate-200 cursor-default"
               )}
             >
               {attribute.name}
@@ -314,7 +338,7 @@ export const AttributeRow = memo(function AttributeRow({
       </div>
 
       {/* Zona derecha: Selector accesible de tipo de dato y condición de obligatoriedad */}
-      <div className="flex items-center gap-1.5 flex-shrink-0 nodrag">
+      <div className="flex items-center gap-1 flex-shrink-0 nodrag">
         {renderTypeTrigger ? (
           renderTypeTrigger(attribute)
         ) : (
@@ -325,7 +349,7 @@ export const AttributeRow = memo(function AttributeRow({
         {isPk ? (
           <span
             title="Obligatorio (No admite valores nulos)"
-            className="text-amber-400 font-mono text-[10px] font-bold select-none px-0.5"
+            className="text-amber-300/80 text-[10px] font-bold select-none px-0.5"
             aria-label="Obligatorio"
           >
             *
@@ -338,7 +362,7 @@ export const AttributeRow = memo(function AttributeRow({
                 : "Obligatorio (definido por relación)"
             }
             className={cn(
-              "font-mono text-[10px] font-bold select-none px-0.5",
+              "text-[10px] font-bold select-none px-0.5",
               attribute.isNullable ? "text-slate-400" : "text-indigo-400/90"
             )}
             aria-label={attribute.isNullable ? "Opcional" : "Obligatorio"}
@@ -348,7 +372,7 @@ export const AttributeRow = memo(function AttributeRow({
         ) : attribute.isNullable ? (
           <span
             title="Opcional (Admite valores vacíos)"
-            className="text-slate-400 font-mono text-[10px] font-medium select-none px-0.5"
+            className="text-slate-500 text-[10px] font-medium select-none px-0.5"
             aria-label="Opcional"
           >
             ?
@@ -356,7 +380,7 @@ export const AttributeRow = memo(function AttributeRow({
         ) : (
           <span
             title="Obligatorio (Requerido)"
-            className="text-amber-400/90 font-mono text-[10px] font-bold select-none px-0.5"
+            className="text-amber-300/80 text-[10px] font-bold select-none px-0.5"
             aria-label="Obligatorio"
           >
             *

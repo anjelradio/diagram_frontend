@@ -1,6 +1,8 @@
 "use client";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+import { Spinner } from "@/components/ui/spinner";
 
 function GoogleIcon() {
   return (
@@ -48,40 +50,65 @@ function GitHubIcon() {
 export default function SocialSignInButtons() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/home";
+  const [pendingProvider, setPendingProvider] = useState<"google" | "github" | null>(null);
 
   const handleGoogleSignIn = async () => {
-    await authClient.signIn.social({
-      provider: "google",
-      callbackURL: callbackUrl,
-      errorCallbackURL: "/auth/login?error=social",
-    });
+    try {
+      setPendingProvider("google");
+      await authClient.signIn.social({
+        provider: "google",
+        callbackURL: callbackUrl,
+        errorCallbackURL: "/auth/login?error=social",
+      });
+    } catch {
+      setPendingProvider(null);
+    }
   };
 
   const handleGitHubSignIn = async () => {
-    await authClient.signIn.social({
-      provider: "github",
-      callbackURL: callbackUrl,
-      errorCallbackURL: "/auth/login?error=social",
-    });
+    try {
+      setPendingProvider("github");
+      await authClient.signIn.social({
+        provider: "github",
+        callbackURL: callbackUrl,
+        errorCallbackURL: "/auth/login?error=social",
+      });
+    } catch {
+      setPendingProvider(null);
+    }
   };
+
+  const isGooglePending = pendingProvider === "google";
+  const isGitHubPending = pendingProvider === "github";
+  const isAnyPending = pendingProvider !== null;
 
   return (
     <div className="grid grid-cols-2 gap-3">
       <button
         type="button"
+        disabled={isAnyPending}
         onClick={handleGoogleSignIn}
-        className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full border border-white/10 hover:border-white/20 bg-[#121316]/90 hover:bg-[#1e1f24] text-slate-200 text-[13px] sm:text-sm font-medium transition-all duration-200 shadow-sm active:scale-[0.98] cursor-pointer"
+        className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full border border-white/10 hover:border-white/20 bg-[#121316]/90 hover:bg-[#1e1f24] text-slate-200 text-[13px] sm:text-sm font-medium transition-all duration-200 shadow-sm active:scale-[0.98] cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
       >
-        <GoogleIcon />
-        Google
+        {isGooglePending ? (
+          <Spinner className="size-[18px] text-white" />
+        ) : (
+          <GoogleIcon />
+        )}
+        <span>Google</span>
       </button>
       <button
         type="button"
+        disabled={isAnyPending}
         onClick={handleGitHubSignIn}
-        className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full border border-white/10 hover:border-white/20 bg-[#121316]/90 hover:bg-[#1e1f24] text-slate-200 text-[13px] sm:text-sm font-medium transition-all duration-200 shadow-sm active:scale-[0.98] cursor-pointer"
+        className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full border border-white/10 hover:border-white/20 bg-[#121316]/90 hover:bg-[#1e1f24] text-slate-200 text-[13px] sm:text-sm font-medium transition-all duration-200 shadow-sm active:scale-[0.98] cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
       >
-        <GitHubIcon />
-        GitHub
+        {isGitHubPending ? (
+          <Spinner className="size-[18px] text-white" />
+        ) : (
+          <GitHubIcon />
+        )}
+        <span>GitHub</span>
       </button>
     </div>
   );

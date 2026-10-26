@@ -101,6 +101,33 @@
   }
 }
 
+/* Scrollbar discreta del selector de tipos de atributo. */
+.diagram-type-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.42) transparent;
+  overscroll-behavior: contain;
+}
+
+.diagram-type-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.diagram-type-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.diagram-type-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.34);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.diagram-type-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(165, 180, 200, 0.58);
+  background-clip: padding-box;
+}
+
 /* Animación ping-pong para nombres de atributos largos con desbordamiento */
 @keyframes marquee-pingpong {
   0%, 15% {
