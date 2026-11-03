@@ -129,9 +129,6 @@ export function determineRelationMaterializationStrategy(
   sourceCardinality: DiagramCardinality | null,
   targetCardinality: DiagramCardinality | null
 ): RelationMaterializationStrategy {
-  if (relationType === "GENERALIZATION") {
-    return "SHARED_PRIMARY_KEY";
-  }
   if (
     relationType === "ASSOCIATION" &&
     isManyToManyRelation(relationType, sourceCardinality, targetCardinality)
@@ -417,7 +414,11 @@ export function planRelationCreation(
   let referencedClass: DiagramClassWithAttributes;
   let isNullable = false;
 
-  if (params.relationType === "AGGREGATION") {
+  if (params.relationType === "GENERALIZATION") {
+    receivingClass = params.sourceClass;
+    referencedClass = params.targetClass;
+    isNullable = false;
+  } else if (params.relationType === "AGGREGATION") {
     receivingClass = params.targetClass;
     referencedClass = params.sourceClass;
     isNullable = true;

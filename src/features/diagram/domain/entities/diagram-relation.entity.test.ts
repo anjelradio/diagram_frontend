@@ -5,7 +5,11 @@ import {
   RELATION_PRESETS,
   getDirectedRoles,
   isManyToManyRelation,
+  SOURCE_VERTEX_OPTIONS,
+  TARGET_CARDINALITY_OPTIONS,
+  isStructuralRelationType,
 } from "./diagram-relation.entity.ts";
+
 
 describe("DiagramRelation Entity - Catálogo, Presets y Roles", () => {
   it("contiene exactamente doce handles de conexión distribuidos en 4 lados", () => {
@@ -73,4 +77,45 @@ describe("DiagramRelation Entity - Catálogo, Presets y Roles", () => {
     });
     assert.equal(getDirectedRoles("ASSOCIATION"), null);
   });
+
+  it("proporciona catálogo de opciones para vértice origen agrupado correctamente", () => {
+    assert.equal(SOURCE_VERTEX_OPTIONS.length, 9);
+    const cardinalityOpts = SOURCE_VERTEX_OPTIONS.filter((o) => o.category === "cardinality");
+    const structuralOpts = SOURCE_VERTEX_OPTIONS.filter((o) => o.category === "structural_head");
+
+    assert.equal(cardinalityOpts.length, 4);
+    assert.equal(structuralOpts.length, 5);
+
+    const badges = cardinalityOpts.map((o) => o.badge);
+    assert.ok(badges.includes("1..1"));
+    assert.ok(badges.includes("0..1"));
+    assert.ok(badges.includes("0..*"));
+    assert.ok(badges.includes("1..*"));
+
+    const structuralTypes = structuralOpts.map((o) => o.relationType);
+    assert.ok(structuralTypes.includes("COMPOSITION"));
+    assert.ok(structuralTypes.includes("AGGREGATION"));
+    assert.ok(structuralTypes.includes("GENERALIZATION"));
+    assert.ok(structuralTypes.includes("REALIZATION"));
+    assert.ok(structuralTypes.includes("DEPENDENCY"));
+  });
+
+  it("proporciona catálogo de opciones para vértice destino restringido a cardinalidades asociativas", () => {
+    assert.equal(TARGET_CARDINALITY_OPTIONS.length, 4);
+    for (const opt of TARGET_CARDINALITY_OPTIONS) {
+      assert.equal(opt.category, "cardinality");
+      assert.equal(opt.relationType, "ASSOCIATION");
+      assert.ok(opt.cardinality);
+    }
+  });
+
+  it("distingue correctamente tipos de relación estructurales vs asociativos", () => {
+    assert.equal(isStructuralRelationType("ASSOCIATION"), false);
+    assert.equal(isStructuralRelationType("GENERALIZATION"), true);
+    assert.equal(isStructuralRelationType("COMPOSITION"), true);
+    assert.equal(isStructuralRelationType("AGGREGATION"), true);
+    assert.equal(isStructuralRelationType("REALIZATION"), true);
+    assert.equal(isStructuralRelationType("DEPENDENCY"), true);
+  });
 });
+

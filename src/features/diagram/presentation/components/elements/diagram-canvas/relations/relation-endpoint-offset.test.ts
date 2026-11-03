@@ -43,7 +43,7 @@ describe("relation-endpoint-offset - Geometría de cabeceras UML", () => {
   });
 
   describe("calculateEndpointOffsets", () => {
-    it("aplica offset en origen hacia la derecha para handle Position.Right en AGGREGATION", () => {
+    it("conecta directamente a las coordenadas del handle sin gap para AGGREGATION", () => {
       const result = calculateEndpointOffsets({
         sourceX: 100,
         sourceY: 200,
@@ -54,13 +54,13 @@ describe("relation-endpoint-offset - Geometría de cabeceras UML", () => {
         relationType: "AGGREGATION",
       });
 
-      assert.equal(result.sourceX, 100 + RELATION_SYMBOL_SIZES.DIAMOND);
+      assert.equal(result.sourceX, 100);
       assert.equal(result.sourceY, 200);
       assert.equal(result.targetX, 400);
       assert.equal(result.targetY, 200);
     });
 
-    it("aplica offset en destino hacia la izquierda para handle Position.Left en GENERALIZATION", () => {
+    it("conecta directamente a las coordenadas del handle sin gap para GENERALIZATION", () => {
       const result = calculateEndpointOffsets({
         sourceX: 100,
         sourceY: 200,
@@ -73,11 +73,11 @@ describe("relation-endpoint-offset - Geometría de cabeceras UML", () => {
 
       assert.equal(result.sourceX, 100);
       assert.equal(result.sourceY, 200);
-      assert.equal(result.targetX, 400 - RELATION_SYMBOL_SIZES.TRIANGLE);
+      assert.equal(result.targetX, 400);
       assert.equal(result.targetY, 200);
     });
 
-    it("aplica offset vertical correcto para Position.Bottom y Position.Top", () => {
+    it("conecta directamente sin gap para COMPOSITION y DEPENDENCY", () => {
       const comp = calculateEndpointOffsets({
         sourceX: 200,
         sourceY: 100,
@@ -89,7 +89,9 @@ describe("relation-endpoint-offset - Geometría de cabeceras UML", () => {
       });
 
       assert.equal(comp.sourceX, 200);
-      assert.equal(comp.sourceY, 100 + RELATION_SYMBOL_SIZES.DIAMOND);
+      assert.equal(comp.sourceY, 100);
+      assert.equal(comp.targetX, 200);
+      assert.equal(comp.targetY, 500);
 
       const dep = calculateEndpointOffsets({
         sourceX: 200,
@@ -104,7 +106,7 @@ describe("relation-endpoint-offset - Geometría de cabeceras UML", () => {
       assert.equal(dep.sourceX, 200);
       assert.equal(dep.sourceY, 100);
       assert.equal(dep.targetX, 200);
-      assert.equal(dep.targetY, 500 - RELATION_SYMBOL_SIZES.ARROW);
+      assert.equal(dep.targetY, 500);
     });
 
     it("no modifica coordenadas para ASSOCIATION", () => {
@@ -122,23 +124,6 @@ describe("relation-endpoint-offset - Geometría de cabeceras UML", () => {
       assert.equal(result.sourceY, 250);
       assert.equal(result.targetX, 350);
       assert.equal(result.targetY, 450);
-    });
-
-    it("atenúa el offset cuando la distancia entre nodos es muy corta para evitar cruces", () => {
-      const result = calculateEndpointOffsets({
-        sourceX: 100,
-        sourceY: 100,
-        targetX: 110,
-        targetY: 100,
-        sourcePosition: Position.Right,
-        targetPosition: Position.Left,
-        relationType: "GENERALIZATION",
-      });
-
-      // La distancia es 10px, menor que el tamaño del triángulo (14px).
-      // El offset no debe superar la distancia ni invertir las coordenadas.
-      assert.ok(result.targetX >= result.sourceX);
-      assert.ok(result.targetX <= 110);
     });
   });
 });

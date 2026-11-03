@@ -10,6 +10,7 @@ import {
   PanOnScrollMode,
   ReactFlow,
   useReactFlow,
+  ViewportPortal,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { cn } from "@/lib/utils";
@@ -20,9 +21,14 @@ import { DiagramClassNode } from "./diagram-class-node";
 import { DiagramRelationEdge } from "./relations/diagram-relation-edge";
 import { ManyToManyRelationEdge } from "./relations/many-to-many-relation-edge";
 import { UmlRelationMarkers } from "./relations/uml-relation-markers";
+import { VertexRelationPopover } from "./relations/vertex-relation-popover";
+import { RelationRubberbandOverlay } from "./relations/relation-rubberband-overlay";
 import { convertRelationsToEdges } from "./relations/diagram-relation-edge.utils";
+import { getHandleConfig } from "./diagram-class-node/relation-handles-config";
+import { getHandlePoint } from "./relations/relation-handle-geometry";
 import {
   planRelationCreation,
+
   resolveOptimalHandles,
 } from "@/features/diagram/domain/services/diagram-relation-planner";
 
@@ -149,14 +155,41 @@ export function DiagramFlowCanvas({
     return () => clearTimeout(emptyTimer);
   }, [nodes.length, fitView, setCenter]);
 
-  const activeRelationPreset = useAppStore((s) => s.activeRelationPreset);
-  const isRelationActive =
-    !isTemporaryHand &&
-    (activeTool === "relation" || activeRelationPreset !== null);
+  const isRelationActive = !isTemporaryHand && activeTool === "relation";
+  const relationDraft = useAppStore((s) => s.relationDraft);
+  const activeVertexPopover = useAppStore((s) => s.activeVertexPopover);
+  const selectSourceOption = useAppStore((s) => s.selectSourceOption);
+  const completeAssociativeRelation = useAppStore(
+    (s) => s.completeAssociativeRelation
+  );
+  const closeVertexMenu = useAppStore((s) => s.closeVertexMenu);
+  const isPopoverOpen = Boolean(activeVertexPopover);
+
+  // Congelar eventos de scroll y zoom en la ventana mientras el menú de relación esté abierto
+  useEffect(() => {
+    if (!isPopoverOpen) return;
+    const preventWheel = (e: WheelEvent) => {
+      e.stopPropagation();
+    };
+    window.addEventListener("wheel", preventWheel, { capture: true });
+    return () => {
+      window.removeEventListener("wheel", preventWheel, { capture: true });
+    };
+  }, [isPopoverOpen]);
+
+  // Calcula dinámicamente el origen de la línea elástica con precisión matemática
+  const rubberbandSourcePoint = useMemo(() => {
+    if (!relationDraft?.source) return null;
+    const node = nodes.find((n) => n.id === relationDraft.source!.classId);
+    if (!node) return relationDraft.source.flowPosition;
+    const pt = getHandlePoint(node, relationDraft.source.handle);
+    return { x: pt.x, y: pt.y };
+  }, [relationDraft?.source, nodes]);
 
   const isHandActive = isTemporaryHand || activeTool === "hand";
   const isSelectActive = !isTemporaryHand && activeTool === "select";
   const isCreateClassActive = !isTemporaryHand && activeTool === "create-class";
+
 
   // Manejo de inicio de conexión desde un handle
   const handleConnectStart = useCallback(
@@ -382,6 +415,8 @@ export function DiagramFlowCanvas({
       if (e.key === "Escape") {
         const store = useAppStore.getState();
         if (
+          store.relationDraft ||
+          store.activeVertexPopover ||
           store.relationDraftSource ||
           store.activeTool === "relation" ||
           store.isRelationPickerOpen
@@ -401,11 +436,15 @@ export function DiagramFlowCanvas({
     setSelectedAttribute(null);
     setSelectedRelationId(null);
     const state = useAppStore.getState();
+    if (state.relationDraft || state.activeVertexPopover) {
+      state.cancelRelationCreation();
+    }
     Object.keys(state.classLocks).forEach((classId) => {
       if (state.classLocks[classId].userId === viewerId) {
         sendRealtimeMessage({ type: "class_lock_release", class_id: classId });
       }
     });
+
     if (!canEdit || !isCreateClassActive || !projectId || !viewerId) return;
 
     const position = screenToFlowPosition({
@@ -475,11 +514,23 @@ export function DiagramFlowCanvas({
     }
   };
 
-  const handlePaneMouseMove = useCallback((event: React.MouseEvent) => {
-    if (!canEdit) return;
-    const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-    sendRealtimeMessage({ type: "cursor_move", x: position.x, y: position.y });
-  }, [canEdit, screenToFlowPosition]);
+  const handlePaneMouseMove = useCallback(
+    (event: React.MouseEvent) => {
+      if (!canEdit) return;
+      const position = screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      sendRealtimeMessage({ type: "cursor_move", x: position.x, y: position.y });
+
+      const store = useAppStore.getState();
+      if (store.relationDraft?.phase === "tracking_cursor") {
+        store.updateRubberbandCursor(position);
+      }
+    },
+    [canEdit, screenToFlowPosition]
+  );
+
 
   const handleSelectionChange = useCallback(({ nodes: selected }: { nodes: DiagramClassNodeType[] }) => {
     if (!canEdit) return;
@@ -754,8 +805,10 @@ export function DiagramFlowCanvas({
 
   return (
     <div
+      onMouseMove={handlePaneMouseMove}
       className={cn(
         "w-full h-full relative overflow-hidden bg-[#212224]",
+
         !canEdit && "cursor-grab active:cursor-grabbing",
         canEdit && (isCreateClassActive || isRelationActive) && "cursor-crosshair",
         canEdit && isHandActive && "cursor-grab active:cursor-grabbing",
@@ -791,17 +844,26 @@ export function DiagramFlowCanvas({
         zoomActivationKeyCode={
           PROJECT_CANVAS_CONFIG.shortcuts.zoomActivationKeyCode as unknown as string[]
         }
-        panOnDrag={!canEdit ? [0, 1, 2] : isHandActive ? [0, 1, 2] : false}
-        selectionOnDrag={canEdit && isSelectActive}
-        elementsSelectable={canEdit && !isHandActive && !isCreateClassActive}
-        nodesDraggable={canEdit && !isHandActive && !isCreateClassActive}
-        panOnScroll={PROJECT_CANVAS_CONFIG.navigation.panOnScroll}
+        panOnDrag={
+          isPopoverOpen
+            ? false
+            : !canEdit
+              ? [0, 1, 2]
+              : isHandActive
+                ? [0, 1, 2]
+                : false
+        }
+        selectionOnDrag={!isPopoverOpen && canEdit && isSelectActive}
+        elementsSelectable={!isPopoverOpen && canEdit && !isHandActive && !isCreateClassActive}
+        nodesDraggable={!isPopoverOpen && canEdit && !isHandActive && !isCreateClassActive}
+        panOnScroll={!isPopoverOpen && PROJECT_CANVAS_CONFIG.navigation.panOnScroll}
         panOnScrollMode={
           PROJECT_CANVAS_CONFIG.navigation.panOnScrollMode as PanOnScrollMode
         }
         panOnScrollSpeed={PROJECT_CANVAS_CONFIG.navigation.panOnScrollSpeed}
-        zoomOnScroll={true}
-        zoomOnPinch={true}
+        zoomOnScroll={!isPopoverOpen}
+        zoomOnPinch={!isPopoverOpen}
+        preventScrolling={isPopoverOpen}
         connectionMode={ConnectionMode.Loose}
         nodesConnectable={canEdit && isRelationActive}
         onConnectStart={handleConnectStart}
@@ -824,9 +886,42 @@ export function DiagramFlowCanvas({
         />
         <InteractiveCanvasGlow />
         <UmlRelationMarkers />
+        {/* Línea elástica interactiva continua al cursor */}
+        {relationDraft &&
+          relationDraft.phase === "tracking_cursor" &&
+          relationDraft.source &&
+          relationDraft.currentCursorPosition && (
+            <ViewportPortal>
+              <RelationRubberbandOverlay
+                sourcePoint={
+                  rubberbandSourcePoint ?? relationDraft.source.flowPosition
+                }
+                currentPoint={relationDraft.currentCursorPosition}
+                relationType={relationDraft.selectedRelationType}
+                sourceCardinality={relationDraft.sourceCardinality}
+                sourceHandle={relationDraft.source.handle}
+              />
+            </ViewportPortal>
+          )}
         {children}
       </ReactFlow>
 
+      {/* Menú Contextual de Vértice (Origen / Destino) */}
+      {activeVertexPopover && relationDraft && (
+        <VertexRelationPopover
+          anchor={activeVertexPopover}
+          step={activeVertexPopover.step}
+          onSelectOption={(option) => {
+            if (activeVertexPopover.step === "source") {
+              selectSourceOption(option);
+            } else if (option.cardinality) {
+              void completeAssociativeRelation(option.cardinality);
+            }
+          }}
+          onClose={closeVertexMenu}
+        />
+      )}
     </div>
   );
 }
+

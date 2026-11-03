@@ -1,4 +1,5 @@
 import type {
+  DiagramCardinality,
   DiagramRelation,
   DiagramRelationType,
 } from "../../../../../domain/entities/diagram-relation.entity.ts";
@@ -105,6 +106,17 @@ export function getRelationEdgeVisuals(
 
 
 /**
+ * Normaliza la visualización de cardinalidades para que '1' se muestre siempre como '1..1'.
+ */
+export function formatCardinalityLabel(
+  cardinality: DiagramCardinality | string | null | undefined
+): string | null {
+  if (!cardinality) return null;
+  if (cardinality === "1" || cardinality === "1..1") return "1..1";
+  return cardinality;
+}
+
+/**
  * Retorna las etiquetas de cardinalidad únicamente si la relación es de tipo ASSOCIATION.
  * Para los demás tipos UML dirigidos, las cardinalidades son nulas.
  */
@@ -113,8 +125,8 @@ export function getCardinalityLabels(
 ): CardinalityLabels {
   if (relation.relationType === "ASSOCIATION") {
     return {
-      source: relation.source.cardinality,
-      target: relation.target.cardinality,
+      source: formatCardinalityLabel(relation.source.cardinality),
+      target: formatCardinalityLabel(relation.target.cardinality),
     };
   }
   return {

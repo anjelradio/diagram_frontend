@@ -13,13 +13,10 @@ import type {
   DiagramRelation,
   DiagramRelationHandle,
 } from "@/features/diagram/domain/entities/diagram-relation.entity";
-import {
-  getCardinalityLabels,
-  getRelationEdgeVisuals,
-  shouldRenderRelationName,
-} from "./diagram-relation-edge.utils";
+import { getCardinalityLabels, getRelationEdgeVisuals, shouldRenderRelationName } from "./diagram-relation-edge.utils";
 import { getSelfLoopPath } from "./relation-path-utils";
 import { RelationNameEditor } from "./relation-name-editor";
+import { getHandlePoint } from "./relation-handle-geometry";
 
 function getCardinalityOffset(pos: Position) {
   switch (pos) {
@@ -36,48 +33,6 @@ function getCardinalityOffset(pos: Position) {
   }
 }
 
-function getHandlePoint(
-  node: {
-    internals: { positionAbsolute: { x: number; y: number } };
-    measured?: { width?: number; height?: number };
-  },
-  handleId?: DiagramRelationHandle
-) {
-  const x = node.internals.positionAbsolute.x;
-  const y = node.internals.positionAbsolute.y;
-  const width = node.measured?.width ?? 220;
-  const height = node.measured?.height ?? 100;
-
-  switch (handleId) {
-    case "TOP_LEFT":
-      return { x: x + width * 0.25, y, position: Position.Top };
-    case "TOP_CENTER":
-      return { x: x + width * 0.5, y, position: Position.Top };
-    case "TOP_RIGHT":
-      return { x: x + width * 0.75, y, position: Position.Top };
-    case "RIGHT_TOP":
-      return { x: x + width, y: y + height * 0.25, position: Position.Right };
-    case "RIGHT_CENTER":
-      return { x: x + width, y: y + height * 0.5, position: Position.Right };
-    case "RIGHT_BOTTOM":
-      return { x: x + width, y: y + height * 0.75, position: Position.Right };
-    case "BOTTOM_RIGHT":
-      return { x: x + width * 0.75, y: y + height, position: Position.Bottom };
-    case "BOTTOM_CENTER":
-      return { x: x + width * 0.5, y: y + height, position: Position.Bottom };
-    case "BOTTOM_LEFT":
-      return { x: x + width * 0.25, y: y + height, position: Position.Bottom };
-    case "LEFT_BOTTOM":
-      return { x, y: y + height * 0.75, position: Position.Left };
-    case "LEFT_CENTER":
-      return { x, y: y + height * 0.5, position: Position.Left };
-    case "LEFT_TOP":
-      return { x, y: y + height * 0.25, position: Position.Left };
-    default:
-      return { x: x + width * 0.5, y, position: Position.Top };
-  }
-}
-
 export type ManyToManyEdgeData = {
   relation: DiagramRelation;
   bridgeClassId?: string;
@@ -85,6 +40,7 @@ export type ManyToManyEdgeData = {
 };
 
 export const ManyToManyRelationEdge = memo(function ManyToManyRelationEdge({
+  id,
   sourceX,
   sourceY,
   targetX,
@@ -103,26 +59,43 @@ export const ManyToManyRelationEdge = memo(function ManyToManyRelationEdge({
   const bridgeHandle =
     edgeData?.bridgeHandle || relation?.bridge?.handle || "TOP_CENTER";
 
+  const sourceNode = useInternalNode(relation?.source.classId ?? "");
+  const targetNode = useInternalNode(relation?.target.classId ?? "");
   const bridgeNode = useInternalNode(bridgeClassId);
   const setSelectedRelationId = useAppStore((s) => s.setSelectedRelationId);
+
+  const sourcePoint = sourceNode && relation
+    ? getHandlePoint(sourceNode, relation.source.handle)
+    : null;
+  const targetPoint = targetNode && relation
+    ? getHandlePoint(targetNode, relation.target.handle)
+    : null;
+
+  const effSourceX = sourcePoint ? sourcePoint.x : sourceX;
+  const effSourceY = sourcePoint ? sourcePoint.y : sourceY;
+  const effSourcePosition = sourcePoint ? sourcePoint.position : sourcePosition;
+
+  const effTargetX = targetPoint ? targetPoint.x : targetX;
+  const effTargetY = targetPoint ? targetPoint.y : targetY;
+  const effTargetPosition = targetPoint ? targetPoint.position : targetPosition;
 
   // 1. Camino principal entre Source y Target (Loop si es reflexivo o SmoothStep si es normal)
   const [mainPath, centerX, centerY] = isSelf
     ? getSelfLoopPath({
-        sourceX,
-        sourceY,
-        sourcePosition,
-        targetX,
-        targetY,
-        targetPosition,
+        sourceX: effSourceX,
+        sourceY: effSourceY,
+        sourcePosition: effSourcePosition,
+        targetX: effTargetX,
+        targetY: effTargetY,
+        targetPosition: effTargetPosition,
       })
     : getSmoothStepPath({
-        sourceX,
-        sourceY,
-        sourcePosition,
-        targetX,
-        targetY,
-        targetPosition,
+        sourceX: effSourceX,
+        sourceY: effSourceY,
+        sourcePosition: effSourcePosition,
+        targetX: effTargetX,
+        targetY: effTargetY,
+        targetPosition: effTargetPosition,
         borderRadius: 8,
       });
 
@@ -159,17 +132,17 @@ export const ManyToManyRelationEdge = memo(function ManyToManyRelationEdge({
   const visuals = getRelationEdgeVisuals(relation.relationType, isSelected);
   const cardinalities = getCardinalityLabels(relation);
 
-  const srcOffset = getCardinalityOffset(sourcePosition);
-  const tgtOffset = getCardinalityOffset(targetPosition);
+  const srcOffset = getCardinalityOffset(effSourcePosition);
+  const tgtOffset = getCardinalityOffset(effTargetPosition);
 
   const srcLabelPos = {
-    x: sourceX + srcOffset.x,
-    y: sourceY + srcOffset.y,
+    x: effSourceX + srcOffset.x,
+    y: effSourceY + srcOffset.y,
   };
 
   const tgtLabelPos = {
-    x: targetX + tgtOffset.x,
-    y: targetY + tgtOffset.y,
+    x: effTargetX + tgtOffset.x,
+    y: effTargetY + tgtOffset.y,
   };
 
   const handleSelectRelation = (e: React.MouseEvent) => {

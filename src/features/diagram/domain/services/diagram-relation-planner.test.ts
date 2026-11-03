@@ -276,7 +276,7 @@ describe("DiagramRelationPlanner Service", () => {
       assert.equal(fk.isNullable, false);
     });
 
-    it("planifica Generalización con SHARED_PRIMARY_KEY en subclase (origen) y fuerza nombre vacío", () => {
+    it("planifica Generalización con FOREIGN_KEY en subclase (origen) hacia superclase (destino) y fuerza nombre vacío", () => {
       idCounter = 1;
       const planned = planRelationCreation({
         name: "IntentoDeNombre",
@@ -290,20 +290,17 @@ describe("DiagramRelationPlanner Service", () => {
 
       assert.equal(planned.relation.name, "");
       assert.equal(planned.createRelationPayload.name, "");
-      assert.equal(planned.materialization.strategy, "SHARED_PRIMARY_KEY");
-      assert.ok(planned.materialization.sharedPrimaryKey);
-      assert.equal(planned.materialization.sharedPrimaryKey.classId, mockClassA.id);
-      assert.equal(
-        planned.materialization.sharedPrimaryKey.referencedClassId,
-        mockClassB.id
-      );
-      assert.equal(
-        planned.materialization.sharedPrimaryKey.attributeId,
-        mockClassA.attributes[0].id
-      );
-      assert.ok(planned.sharedPrimaryKeyAttribute);
-      assert.equal(planned.sharedPrimaryKeyAttribute.isPrimaryKey, true);
-      assert.equal(planned.sharedPrimaryKeyAttribute.isForeignKey, true);
+      assert.equal(planned.materialization.strategy, "FOREIGN_KEY");
+      assert.equal(planned.materialization.foreignAttributes.length, 1);
+      const fk = planned.materialization.foreignAttributes[0];
+      assert.equal(fk.classId, mockClassA.id);
+      assert.equal(fk.referencedClassId, mockClassB.id);
+      assert.equal(fk.isNullable, false);
+      assert.equal(fk.isPrimaryKey, false);
+      assert.equal(fk.isForeignKey, true);
+      assert.ok(planned.foreignKeyAttribute);
+      assert.equal(planned.foreignKeyAttribute.isPrimaryKey, false);
+      assert.equal(planned.foreignKeyAttribute.isForeignKey, true);
     });
 
     it("planifica Realización con FK no nullable en implementador (origen) y fuerza nombre vacío", () => {

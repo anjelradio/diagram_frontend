@@ -6,6 +6,7 @@ import {
   EdgeLabelRenderer,
   getSmoothStepPath,
   Position,
+  useInternalNode,
   type EdgeProps,
 } from "@xyflow/react";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
@@ -15,9 +16,9 @@ import {
   getRelationEdgeVisuals,
   shouldRenderRelationName,
 } from "./diagram-relation-edge.utils";
-import { calculateEndpointOffsets } from "./relation-endpoint-offset";
 import { getSelfLoopPath } from "./relation-path-utils";
 import { RelationNameEditor } from "./relation-name-editor";
+import { getHandlePoint } from "./relation-handle-geometry";
 
 function getCardinalityOffset(pos: Position) {
   switch (pos) {
@@ -55,39 +56,40 @@ export const DiagramRelationEdge = memo(function DiagramRelationEdge({
 
   const isSelf = relation ? relation.source.classId === relation.target.classId : false;
 
-  const {
-    sourceX: effSourceX,
-    sourceY: effSourceY,
-    targetX: effTargetX,
-    targetY: effTargetY,
-  } = relation
-    ? calculateEndpointOffsets({
-        sourceX,
-        sourceY,
-        targetX,
-        targetY,
-        sourcePosition,
-        targetPosition,
-        relationType: relation.relationType,
-      })
-    : { sourceX, sourceY, targetX, targetY };
+  const sourceNode = useInternalNode(relation?.source.classId ?? "");
+  const targetNode = useInternalNode(relation?.target.classId ?? "");
+
+  const sourcePoint = sourceNode && relation
+    ? getHandlePoint(sourceNode, relation.source.handle)
+    : null;
+  const targetPoint = targetNode && relation
+    ? getHandlePoint(targetNode, relation.target.handle)
+    : null;
+
+  const effSourceX = sourcePoint ? sourcePoint.x : sourceX;
+  const effSourceY = sourcePoint ? sourcePoint.y : sourceY;
+  const effSourcePosition = sourcePoint ? sourcePoint.position : sourcePosition;
+
+  const effTargetX = targetPoint ? targetPoint.x : targetX;
+  const effTargetY = targetPoint ? targetPoint.y : targetY;
+  const effTargetPosition = targetPoint ? targetPoint.position : targetPosition;
 
   const [edgePath, labelX, labelY] = isSelf
     ? getSelfLoopPath({
         sourceX: effSourceX,
         sourceY: effSourceY,
-        sourcePosition,
+        sourcePosition: effSourcePosition,
         targetX: effTargetX,
         targetY: effTargetY,
-        targetPosition,
+        targetPosition: effTargetPosition,
       })
     : getSmoothStepPath({
         sourceX: effSourceX,
         sourceY: effSourceY,
-        sourcePosition,
+        sourcePosition: effSourcePosition,
         targetX: effTargetX,
         targetY: effTargetY,
-        targetPosition,
+        targetPosition: effTargetPosition,
         borderRadius: 8,
       });
 
@@ -105,17 +107,17 @@ export const DiagramRelationEdge = memo(function DiagramRelationEdge({
   const visuals = getRelationEdgeVisuals(relation.relationType, isSelected);
   const cardinalities = getCardinalityLabels(relation);
 
-  const srcOffset = getCardinalityOffset(sourcePosition);
-  const tgtOffset = getCardinalityOffset(targetPosition);
+  const srcOffset = getCardinalityOffset(effSourcePosition);
+  const tgtOffset = getCardinalityOffset(effTargetPosition);
 
   const srcLabelPos = {
-    x: sourceX + srcOffset.x,
-    y: sourceY + srcOffset.y,
+    x: effSourceX + srcOffset.x,
+    y: effSourceY + srcOffset.y,
   };
 
   const tgtLabelPos = {
-    x: targetX + tgtOffset.x,
-    y: targetY + tgtOffset.y,
+    x: effTargetX + tgtOffset.x,
+    y: effTargetY + tgtOffset.y,
   };
 
   const handleSelectRelation = (e: React.MouseEvent) => {
@@ -161,7 +163,7 @@ export const DiagramRelationEdge = memo(function DiagramRelationEdge({
               transform: `translate(-50%, -50%) translate(${srcLabelPos.x}px,${srcLabelPos.y}px)`,
               pointerEvents: "none",
             }}
-            className="text-[10px] font-medium text-slate-300 bg-[#1b1c22]/95 px-1.5 py-0.5 rounded-md border border-white/10 shadow-sm backdrop-blur-sm select-none"
+            className="text-[10px] font-mono font-medium text-slate-300 bg-[#17181d]/95 px-1.5 py-0.5 rounded-md border border-white/10 shadow-sm backdrop-blur-sm select-none"
           >
             {cardinalities.source}
           </div>
@@ -175,7 +177,7 @@ export const DiagramRelationEdge = memo(function DiagramRelationEdge({
               transform: `translate(-50%, -50%) translate(${tgtLabelPos.x}px,${tgtLabelPos.y}px)`,
               pointerEvents: "none",
             }}
-            className="text-[10px] font-medium text-slate-300 bg-[#1b1c22]/95 px-1.5 py-0.5 rounded-md border border-white/10 shadow-sm backdrop-blur-sm select-none"
+            className="text-[10px] font-mono font-medium text-slate-300 bg-[#17181d]/95 px-1.5 py-0.5 rounded-md border border-white/10 shadow-sm backdrop-blur-sm select-none"
           >
             {cardinalities.target}
           </div>

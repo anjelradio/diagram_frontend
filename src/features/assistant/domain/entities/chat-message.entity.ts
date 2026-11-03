@@ -18,6 +18,8 @@ export interface ChatMessageAttachment {
   url: string;
   name: string;
   sizeBytes?: number;
+  width?: number;
+  height?: number;
 }
 
 export interface ChatMessage {

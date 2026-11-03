@@ -5,10 +5,11 @@ import { test } from "node:test";
 const source = readFileSync(new URL("./diagram-flow-canvas.tsx", import.meta.url), "utf8");
 
 test("el bloqueo de agente conserva pan y zoom pero deshabilita mutaciones", () => {
-  assert.match(source, /panOnDrag=\{!canEdit \? \[0, 1, 2\]/);
-  assert.match(source, /selectionOnDrag=\{canEdit && isSelectActive\}/);
-  assert.match(source, /nodesDraggable=\{canEdit/);
-  assert.match(source, /zoomOnScroll=\{true\}/);
+  assert.match(source, /!canEdit\s*\?\s*\[0,\s*1,\s*2\]/);
+  assert.match(source, /canEdit && isSelectActive/);
+  assert.match(source, /nodesDraggable=\{!isPopoverOpen && canEdit/);
+  assert.match(source, /zoomOnScroll=\{!isPopoverOpen\}/);
+  assert.match(source, /preventScrolling=\{isPopoverOpen\}/);
 });
 
 test("handleNodeDragStop preserva el lock si el nodo continúa seleccionado", () => {

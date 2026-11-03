@@ -45,3 +45,9 @@ test("useInBrowserStt gestiona errores de permisos y notifica con appToast", () 
   assert.match(source, /appToast\.error/);
   assert.match(source, /status: "error"/);
 });
+
+test("useInBrowserStt cancelSession desvincula onstop, limpia chunks y restablece status idle", () => {
+  assert.match(source, /mediaRecorderRef\.current\.onstop = null/);
+  assert.match(source, /audioChunksRef\.current = \[\]/);
+  assert.match(source, /setState\(\{ status: "idle" \}\)/);
+});

@@ -63,5 +63,18 @@ test("AgentChatInput soporta estados de STT: downloading con icono de descarga y
   assert.match(source, /onPauseClick/);
 });
 
+test("AgentChatInput renderiza ImageAttachmentBadge e inhabilita el botón de imagen si hay adjunto", () => {
+  assert.match(source, /<ImageAttachmentBadge/);
+  assert.match(source, /disabled=\{disabled \|\| Boolean\(draftAttachment\)\}/);
+  assert.match(source, /draftAttachment \? "Solo se permite una imagen a la vez"/);
+});
+
+test("AgentChatInput incluye botón X de cancelar grabación a la izquierda del botón Square y tecla Escape", () => {
+  assert.match(source, /onCancelVoiceClick/);
+  assert.match(source, /<X className="w-3\.5 h-3\.5"/);
+  assert.match(source, /e\.key === "Escape"/);
+  assert.match(source, /onCancelVoiceClick\?\.\(\)/);
+});
+
 
 

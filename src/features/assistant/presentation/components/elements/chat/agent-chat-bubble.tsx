@@ -9,6 +9,8 @@ export interface AgentChatBubbleProps {
   message: ChatMessage;
   /** Indica si el mensaje pertenece al usuario en sesión */
   isCurrentUser: boolean;
+  /** Callback opcional al hacer clic en una imagen adjunta */
+  onImageClick?: (url: string) => void;
   /** Clases CSS opcionales */
   className?: string;
 }
@@ -18,6 +20,7 @@ const COLLAPSED_MAX_HEIGHT = 120; // Altura máxima en px del bubble colapsado (
 export function AgentChatBubble({
   message,
   isCurrentUser,
+  onImageClick,
   className,
 }: AgentChatBubbleProps) {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -98,6 +101,34 @@ export function AgentChatBubble({
               : "bg-zinc-800 text-zinc-100 border border-white/10 rounded-2xl rounded-tl-sm"
           )}
         >
+          {/* Imágenes adjuntas del mensaje */}
+          {message.attachments && message.attachments.length > 0 && (
+            <div className="flex flex-col gap-2 mb-2">
+              {message.attachments
+                .filter((att) => att.type === "image")
+                .map((att) => (
+                  <div
+                    key={att.id}
+                    onClick={() => onImageClick?.(att.url)}
+                    className="relative rounded-xl overflow-hidden cursor-pointer group/img max-h-56 border border-white/10 shadow-sm"
+                    title="Hacer clic para ampliar imagen"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={att.url}
+                      alt={att.name || "Imagen adjunta"}
+                      className="w-full h-auto max-h-56 object-cover transition-transform duration-200 group-hover/img:scale-105 pointer-events-none"
+                    />
+                    <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/25 transition-colors flex items-center justify-center">
+                      <span className="opacity-0 group-hover/img:opacity-100 text-[11px] text-white bg-black/60 px-2.5 py-1 rounded-full transition-opacity shadow-sm">
+                        Ver imagen
+                      </span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+
           {/* Contenedor del contenido textual con clamp de altura si excede el límite y está colapsado */}
           <div
             ref={contentRef}

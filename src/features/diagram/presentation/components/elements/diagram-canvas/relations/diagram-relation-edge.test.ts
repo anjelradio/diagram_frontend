@@ -4,6 +4,7 @@ import type { DiagramRelation } from "../../../../../domain/entities/diagram-rel
 import {
   convertRelationToEdge,
   convertRelationsToEdges,
+  formatCardinalityLabel,
   getCardinalityLabels,
   getRelationEdgeVisuals,
   shouldRenderRelationName,
@@ -215,10 +216,19 @@ describe("DiagramRelationEdge Utils & Mappers", () => {
   });
 
   describe("getCardinalityLabels", () => {
-    it("devuelve cardinalidades de origen y destino para ASSOCIATION", () => {
+    it("devuelve cardinalidades de origen y destino normalizadas (1 -> 1..1) para ASSOCIATION", () => {
       const labels = getCardinalityLabels(baseAssociation);
-      assert.equal(labels.source, "1");
+      assert.equal(labels.source, "1..1");
       assert.equal(labels.target, "0..*");
+    });
+
+    it("normaliza etiquetas de cardinalidad con formatCardinalityLabel", () => {
+      assert.equal(formatCardinalityLabel("1"), "1..1");
+      assert.equal(formatCardinalityLabel("1..1"), "1..1");
+      assert.equal(formatCardinalityLabel("0..1"), "0..1");
+      assert.equal(formatCardinalityLabel("0..*"), "0..*");
+      assert.equal(formatCardinalityLabel("1..*"), "1..*");
+      assert.equal(formatCardinalityLabel(null), null);
     });
 
     it("devuelve null en ambos extremos para tipos no asociativos", () => {

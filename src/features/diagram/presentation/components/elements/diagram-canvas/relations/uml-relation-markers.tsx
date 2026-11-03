@@ -18,7 +18,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         <marker
           id="aggregation-diamond"
           viewBox="0 0 18 10"
-          refX="0"
+          refX="18"
           refY="5"
           markerWidth="18"
           markerHeight="10"
@@ -28,7 +28,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         >
           <polygon
             points="0,5 9,1 18,5 9,9"
-            fill="#212224"
+            fill="#17181d"
             stroke="#94a3b8"
             strokeWidth="1.5"
             strokeLinejoin="round"
@@ -37,7 +37,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         <marker
           id="aggregation-diamond-selected"
           viewBox="0 0 18 10"
-          refX="0"
+          refX="18"
           refY="5"
           markerWidth="18"
           markerHeight="10"
@@ -47,7 +47,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         >
           <polygon
             points="0,5 9,1 18,5 9,9"
-            fill="#212224"
+            fill="#17181d"
             stroke="#818cf8"
             strokeWidth="2"
             strokeLinejoin="round"
@@ -58,7 +58,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         <marker
           id="composition-diamond"
           viewBox="0 0 18 10"
-          refX="0"
+          refX="18"
           refY="5"
           markerWidth="18"
           markerHeight="10"
@@ -77,7 +77,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         <marker
           id="composition-diamond-selected"
           viewBox="0 0 18 10"
-          refX="0"
+          refX="18"
           refY="5"
           markerWidth="18"
           markerHeight="10"
@@ -98,7 +98,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         <marker
           id="generalization-triangle"
           viewBox="0 0 14 14"
-          refX="0"
+          refX="14"
           refY="7"
           markerWidth="14"
           markerHeight="14"
@@ -108,7 +108,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         >
           <polygon
             points="0,1 14,7 0,13"
-            fill="#212224"
+            fill="#17181d"
             stroke="#94a3b8"
             strokeWidth="1.5"
             strokeLinejoin="round"
@@ -117,7 +117,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         <marker
           id="generalization-triangle-selected"
           viewBox="0 0 14 14"
-          refX="0"
+          refX="14"
           refY="7"
           markerWidth="14"
           markerHeight="14"
@@ -127,7 +127,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         >
           <polygon
             points="0,1 14,7 0,13"
-            fill="#212224"
+            fill="#17181d"
             stroke="#818cf8"
             strokeWidth="2"
             strokeLinejoin="round"
@@ -138,7 +138,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         <marker
           id="realization-triangle"
           viewBox="0 0 14 14"
-          refX="0"
+          refX="14"
           refY="7"
           markerWidth="14"
           markerHeight="14"
@@ -148,7 +148,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         >
           <polygon
             points="0,1 14,7 0,13"
-            fill="#212224"
+            fill="#17181d"
             stroke="#94a3b8"
             strokeWidth="1.5"
             strokeLinejoin="round"
@@ -157,7 +157,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         <marker
           id="realization-triangle-selected"
           viewBox="0 0 14 14"
-          refX="0"
+          refX="14"
           refY="7"
           markerWidth="14"
           markerHeight="14"
@@ -167,7 +167,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         >
           <polygon
             points="0,1 14,7 0,13"
-            fill="#212224"
+            fill="#17181d"
             stroke="#818cf8"
             strokeWidth="2"
             strokeLinejoin="round"
@@ -178,7 +178,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         <marker
           id="dependency-arrow"
           viewBox="0 0 12 12"
-          refX="0"
+          refX="11"
           refY="6"
           markerWidth="12"
           markerHeight="12"
@@ -198,7 +198,7 @@ export const UmlRelationMarkers = memo(function UmlRelationMarkers() {
         <marker
           id="dependency-arrow-selected"
           viewBox="0 0 12 12"
-          refX="0"
+          refX="11"
           refY="6"
           markerWidth="12"
           markerHeight="12"

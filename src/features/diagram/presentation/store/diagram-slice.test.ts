@@ -238,3 +238,232 @@ describe("DiagramSlice - applyRemoteMutation", () => {
     assert.equal(hydratedNode?.selected, true, "Debe preservar selected: true");
   });
 });
+
+describe("DiagramSlice - Flujo Interactivo de Relaciones (US1, US2, US3, US4)", () => {
+  const setupWithClasses = () => {
+    const store = createStore<DiagramSlice>((...args) =>
+      createDiagramSlice(...args)
+    );
+    store.getState().setDiagramContext("proj_1", "user_1", true);
+    store.getState().applyRemoteMutation("CREATE_CLASS", {
+      id: "class_a",
+      name: "Usuario",
+      position_x: 100,
+      position_y: 100,
+      attributes: [
+        {
+          id: "attr_a1",
+          class_id: "class_a",
+          name: "id",
+          data_type: "UUID",
+          position: 0,
+          is_primary_key: true,
+          is_nullable: false,
+        },
+      ],
+    });
+    store.getState().applyRemoteMutation("CREATE_CLASS", {
+      id: "class_b",
+      name: "Rol",
+      position_x: 400,
+      position_y: 100,
+      attributes: [
+        {
+          id: "attr_b1",
+          class_id: "class_b",
+          name: "id",
+          data_type: "UUID",
+          position: 0,
+          is_primary_key: true,
+          is_nullable: false,
+        },
+      ],
+    });
+    return store;
+  };
+
+  it("US1: inicializa menú contextual en vértice origen al ejecutar openVertexMenu", () => {
+    const store = setupWithClasses();
+    assert.equal(store.getState().relationDraft, null);
+    assert.equal(store.getState().activeVertexPopover, null);
+
+    store.getState().openVertexMenu({
+      classId: "class_a",
+      handleId: "RIGHT_CENTER",
+      step: "source",
+      screenPosition: { x: 200, y: 150 },
+      flowPosition: { x: 200, y: 150 },
+    });
+
+    const draft = store.getState().relationDraft;
+    assert.ok(draft);
+    assert.equal(draft.phase, "source_popover_open");
+    assert.equal(draft.source?.classId, "class_a");
+    assert.equal(draft.source?.handle, "RIGHT_CENTER");
+    assert.equal(store.getState().activeVertexPopover?.step, "source");
+
+    // closeVertexMenu descarta el borrador si no se seleccionó opción
+    store.getState().closeVertexMenu();
+    assert.equal(store.getState().relationDraft, null);
+    assert.equal(store.getState().activeVertexPopover, null);
+  });
+
+  it("US2: trazado elástico y creación asociativa N:M genera clase intermedia", async () => {
+    const store = setupWithClasses();
+
+    // 1. Abrir menú en origen
+    store.getState().openVertexMenu({
+      classId: "class_a",
+      handleId: "RIGHT_CENTER",
+      step: "source",
+      screenPosition: { x: 200, y: 150 },
+      flowPosition: { x: 200, y: 150 },
+    });
+
+    // 2. Seleccionar cardinalidad muchos (1..*) en origen
+    store.getState().selectSourceOption({
+      id: "card_1_many",
+      category: "cardinality",
+      label: "Uno a muchos (1..*)",
+      badge: "1..*",
+      relationType: "ASSOCIATION",
+      cardinality: "1..*",
+    });
+
+    let draft = store.getState().relationDraft;
+    assert.equal(draft?.phase, "tracking_cursor");
+    assert.equal(draft?.selectedRelationType, "ASSOCIATION");
+    assert.equal(draft?.sourceCardinality, "1..*");
+    assert.equal(store.getState().activeVertexPopover, null);
+
+    // 3. Simular movimiento elástico del cursor
+    store.getState().updateRubberbandCursor({ x: 350, y: 150 });
+    assert.deepEqual(store.getState().relationDraft?.currentCursorPosition, {
+      x: 350,
+      y: 150,
+    });
+
+    // 4. Clic en vértice destino abre menú de destino
+    store.getState().openVertexMenu({
+      classId: "class_b",
+      handleId: "LEFT_CENTER",
+      step: "target",
+      screenPosition: { x: 400, y: 150 },
+      flowPosition: { x: 400, y: 150 },
+    });
+    assert.equal(store.getState().relationDraft?.phase, "target_popover_open");
+    assert.equal(store.getState().activeVertexPopover?.step, "target");
+
+    // 5. Seleccionar cardinalidad muchos (0..*) en destino
+    await store.getState().completeAssociativeRelation("0..*");
+
+    // Borrador y popover cerrados
+    assert.equal(store.getState().relationDraft, null);
+    assert.equal(store.getState().activeVertexPopover, null);
+
+    // Relación creada en el store
+    const relations = store.getState().relations;
+    assert.equal(relations.length, 1);
+    assert.equal(relations[0]?.relationType, "ASSOCIATION");
+    assert.equal(relations[0]?.source.cardinality, "1..*");
+    assert.equal(relations[0]?.target.cardinality, "0..*");
+
+    // Como es N:M (* a *), se genera clase intermedia puente
+    const nodes = store.getState().nodes;
+    assert.equal(nodes.length, 3, "Debe existir una clase intermedia adicional");
+    const bridgeClass = nodes.find((n) => n.id !== "class_a" && n.id !== "class_b");
+    assert.ok(bridgeClass, "Debe haberse inyectado el nodo de la clase intermedia");
+  });
+
+  it("US3: creación de relación estructural (Herencia) se conecta directamente", async () => {
+    const store = setupWithClasses();
+
+    // 1. Abrir menú en origen
+    store.getState().openVertexMenu({
+      classId: "class_a",
+      handleId: "RIGHT_CENTER",
+      step: "source",
+      screenPosition: { x: 200, y: 150 },
+      flowPosition: { x: 200, y: 150 },
+    });
+
+    // 2. Seleccionar Herencia / Generalización
+    store.getState().selectSourceOption({
+      id: "head_generalization",
+      category: "structural_head",
+      label: "Herencia / Generalización",
+      relationType: "GENERALIZATION",
+      iconType: "flecha_triangular",
+    });
+
+    assert.equal(store.getState().relationDraft?.phase, "tracking_cursor");
+    assert.equal(store.getState().relationDraft?.selectedRelationType, "GENERALIZATION");
+
+    // 3. Conexión directa al hacer clic en destino
+    await store.getState().completeStructuralRelation("class_b", "LEFT_CENTER");
+
+    assert.equal(store.getState().relationDraft, null);
+    assert.equal(store.getState().activeVertexPopover, null);
+
+    const relations = store.getState().relations;
+    assert.equal(relations.length, 1);
+    assert.equal(relations[0]?.relationType, "GENERALIZATION");
+  });
+
+  it("US3: bloquea autorrelaciones estructurales no permitidas", async () => {
+    const store = setupWithClasses();
+
+    store.getState().openVertexMenu({
+      classId: "class_a",
+      handleId: "TOP_CENTER",
+      step: "source",
+      screenPosition: { x: 150, y: 100 },
+      flowPosition: { x: 150, y: 100 },
+    });
+
+    store.getState().selectSourceOption({
+      id: "head_generalization",
+      category: "structural_head",
+      label: "Herencia / Generalización",
+      relationType: "GENERALIZATION",
+      iconType: "flecha_triangular",
+    });
+
+    // Intentar conectar hacia la misma clase
+    await store.getState().completeStructuralRelation("class_a", "BOTTOM_CENTER");
+
+    // No debe crear relación
+    assert.equal(store.getState().relations.length, 0);
+  });
+
+  it("US4: cancelRelationCreation y cambio de herramienta limpian el borrador", () => {
+    const store = setupWithClasses();
+
+    store.getState().openVertexMenu({
+      classId: "class_a",
+      handleId: "RIGHT_CENTER",
+      step: "source",
+      screenPosition: { x: 200, y: 150 },
+      flowPosition: { x: 200, y: 150 },
+    });
+    assert.ok(store.getState().relationDraft);
+
+    // Cancelar borrador
+    store.getState().cancelRelationCreation();
+    assert.equal(store.getState().relationDraft, null);
+    assert.equal(store.getState().activeVertexPopover, null);
+
+    // Iniciar de nuevo y cambiar a herramienta cursor
+    store.getState().openVertexMenu({
+      classId: "class_a",
+      handleId: "RIGHT_CENTER",
+      step: "source",
+      screenPosition: { x: 200, y: 150 },
+      flowPosition: { x: 200, y: 150 },
+    });
+    store.getState().setActiveTool("cursor");
+    assert.equal(store.getState().relationDraft, null);
+    assert.equal(store.getState().activeVertexPopover, null);
+  });
+});
+

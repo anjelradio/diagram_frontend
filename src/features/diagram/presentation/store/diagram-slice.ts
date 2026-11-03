@@ -12,13 +12,22 @@ import type {
   DiagramCardinality,
   DiagramRelation,
   DiagramRelationHandle,
+  DiagramRelationType,
   RelationPreset,
+  RelationCreationDraft,
+  VertexPopoverAnchor,
+  VertexOptionItem,
 } from "../../domain/entities/diagram-relation.entity.ts";
-import type { PlannedRelationAggregate } from "../../domain/services/diagram-relation-planner.ts";
+import {
+  planRelationCreation,
+  type PlannedRelationAggregate,
+} from "../../domain/services/diagram-relation-planner.ts";
+import { diagramOperationQueueRepositoryImpl } from "../../infrastructure/storage/diagram-operation-queue.repository.ts";
 import {
   projectDiagramOperation,
   projectDiagramOperations,
 } from "./diagram-operation-projector.ts";
+
 
 export type DiagramClassNodeData = {
   id: string;
@@ -64,6 +73,11 @@ export type DiagramSlice = {
   selectedRelationId: string | null;
   isRelationPickerOpen: boolean;
 
+  /** Borrador de creación interactiva de relaciones en 2 pasos */
+  relationDraft: RelationCreationDraft | null;
+  /** Ancla activa para renderizar el menú contextual flotante de vértice */
+  activeVertexPopover: VertexPopoverAnchor | null;
+
   setDiagramContext: (
     projectId: string,
     viewerId: string,
@@ -87,6 +101,18 @@ export type DiagramSlice = {
   ) => void;
   setSelectedRelationId: (id: string | null) => void;
   cancelRelationCreation: () => void;
+
+  /** Acciones del flujo interactivo de relaciones */
+  openVertexMenu: (anchor: VertexPopoverAnchor) => void;
+  closeVertexMenu: () => void;
+  selectSourceOption: (option: VertexOptionItem) => void;
+  updateRubberbandCursor: (cursorPosition: { x: number; y: number }) => void;
+  completeAssociativeRelation: (targetCardinality: DiagramCardinality) => Promise<void>;
+  completeStructuralRelation: (
+    targetClassId: string,
+    targetHandle: DiagramRelationHandle
+  ) => Promise<void>;
+
   setRelations: (relations: DiagramRelation[]) => void;
   addOptimisticRelation: (relation: DiagramRelation) => void;
   addOptimisticRelationAggregate: (aggregate: PlannedRelationAggregate) => void;
@@ -125,7 +151,7 @@ export const createDiagramSlice: StateCreator<
   [],
   [],
   DiagramSlice
-> = (set) => ({
+> = (set, get) => ({
   projectId: null,
   viewerId: null,
   canEdit: false,
@@ -142,6 +168,9 @@ export const createDiagramSlice: StateCreator<
   selectedRelationId: null,
   isRelationPickerOpen: false,
 
+  relationDraft: null,
+  activeVertexPopover: null,
+
   setDiagramContext: (projectId, viewerId, canEdit) =>
     set((state) => ({
       projectId,
@@ -152,6 +181,8 @@ export const createDiagramSlice: StateCreator<
             activeRelationPreset: null,
             relationDraftSource: null,
             customRelationDraft: null,
+            relationDraft: null,
+            activeVertexPopover: null,
             activeTool:
               state.activeTool === "relation" ? "cursor" : state.activeTool,
           }
@@ -169,9 +200,12 @@ export const createDiagramSlice: StateCreator<
             activeRelationPreset: null,
             relationDraftSource: null,
             customRelationDraft: null,
+            relationDraft: null,
+            activeVertexPopover: null,
           }
         : {}),
     }),
+
 
   setSelectedAttribute: (selectedAttribute) =>
     set({ selectedAttribute }),
@@ -338,8 +372,270 @@ export const createDiagramSlice: StateCreator<
       relationDraftSource: null,
       customRelationDraft: null,
       isRelationPickerOpen: false,
+      relationDraft: null,
+      activeVertexPopover: null,
     }));
   },
+
+  openVertexMenu: (anchor: VertexPopoverAnchor) => {
+    if (anchor.step === "source") {
+      set({
+        activeVertexPopover: anchor,
+        relationDraft: {
+          phase: "source_popover_open",
+          source: {
+            classId: anchor.classId,
+            handle: anchor.handleId,
+            flowPosition: anchor.flowPosition,
+          },
+          selectedRelationType: null,
+          sourceCardinality: null,
+          target: null,
+          targetCardinality: null,
+          currentCursorPosition: anchor.flowPosition,
+          activePopover: anchor,
+        },
+      });
+    } else {
+      set((state) => ({
+        activeVertexPopover: anchor,
+        relationDraft: state.relationDraft
+          ? {
+              ...state.relationDraft,
+              phase: "target_popover_open",
+              target: {
+                classId: anchor.classId,
+                handle: anchor.handleId,
+                flowPosition: anchor.flowPosition,
+              },
+              activePopover: anchor,
+            }
+          : null,
+      }));
+    }
+  },
+
+  closeVertexMenu: () => {
+    set((state) => {
+      if (!state.relationDraft) {
+        return { activeVertexPopover: null };
+      }
+      if (state.relationDraft.phase === "source_popover_open") {
+        return {
+          activeVertexPopover: null,
+          relationDraft: null,
+        };
+      }
+      if (state.relationDraft.phase === "target_popover_open") {
+        return {
+          activeVertexPopover: null,
+          relationDraft: {
+            ...state.relationDraft,
+            phase: "tracking_cursor",
+            target: null,
+            activePopover: null,
+          },
+        };
+      }
+      return { activeVertexPopover: null };
+    });
+  },
+
+  selectSourceOption: (option: VertexOptionItem) => {
+    set((state) => {
+      if (!state.relationDraft?.source) return {};
+      return {
+        activeVertexPopover: null,
+        relationDraft: {
+          ...state.relationDraft,
+          phase: "tracking_cursor",
+          selectedRelationType: option.relationType,
+          sourceCardinality: option.cardinality ?? null,
+          activePopover: null,
+        },
+      };
+    });
+  },
+
+  updateRubberbandCursor: (cursorPosition: { x: number; y: number }) => {
+    set((state) => {
+      if (!state.relationDraft || state.relationDraft.phase !== "tracking_cursor") {
+        return {};
+      }
+      return {
+        relationDraft: {
+          ...state.relationDraft,
+          currentCursorPosition: cursorPosition,
+        },
+      };
+    });
+  },
+
+  completeAssociativeRelation: async (targetCardinality: DiagramCardinality) => {
+    const state = get();
+    const draft = state.relationDraft;
+    if (!draft || !draft.source || !draft.target) return;
+
+    const sourceNode = state.nodes.find((n) => n.id === draft.source!.classId);
+    const targetNode = state.nodes.find((n) => n.id === draft.target!.classId);
+    if (!sourceNode || !targetNode) {
+      set({ relationDraft: null, activeVertexPopover: null });
+      return;
+    }
+
+    const sourceClass: DiagramClassWithAttributes = {
+      id: sourceNode.id,
+      name: sourceNode.data.name,
+      positionX: sourceNode.position.x,
+      positionY: sourceNode.position.y,
+      attributes: sourceNode.data.attributes || [],
+    };
+
+    const targetClass: DiagramClassWithAttributes = {
+      id: targetNode.id,
+      name: targetNode.data.name,
+      positionX: targetNode.position.x,
+      positionY: targetNode.position.y,
+      attributes: targetNode.data.attributes || [],
+    };
+
+    const existingClasses: DiagramClass[] = state.nodes.map((n) => ({
+      id: n.id,
+      name: n.data.name,
+      positionX: n.position.x,
+      positionY: n.position.y,
+    }));
+
+    const aggregate = planRelationCreation({
+      sourceClass,
+      targetClass,
+      relationType: "ASSOCIATION",
+      sourceCardinality: draft.sourceCardinality,
+      targetCardinality,
+      sourceHandle: draft.source.handle,
+      targetHandle: draft.target.handle,
+      existingClasses,
+    });
+
+    if (typeof window !== "undefined" && state.projectId && state.viewerId) {
+      try {
+        await diagramOperationQueueRepositoryImpl.enqueue({
+          operationId: crypto.randomUUID(),
+          viewerId: state.viewerId,
+          projectId: state.projectId,
+          kind: "CREATE_RELATION",
+          classId: aggregate.relation.source.classId,
+          payload: {
+            id: aggregate.relation.id,
+            name: aggregate.relation.name,
+            relationType: aggregate.relation.relationType,
+            source: aggregate.relation.source,
+            target: aggregate.relation.target,
+            materialization: aggregate.materialization,
+          },
+          createdAt: new Date().toISOString(),
+          attempts: 0,
+          state: "pending",
+        });
+        window.dispatchEvent(new CustomEvent("diagram:process-queue"));
+      } catch (err) {
+        console.error("Error encolando creación de relación asociativa:", err);
+      }
+    }
+
+    state.addOptimisticRelationAggregate(aggregate);
+    set({
+      relationDraft: null,
+      activeVertexPopover: null,
+    });
+  },
+
+  completeStructuralRelation: async (
+    targetClassId: string,
+    targetHandle: DiagramRelationHandle
+  ) => {
+    const state = get();
+    const draft = state.relationDraft;
+    if (!draft || !draft.source) return;
+
+    if (draft.source.classId === targetClassId) {
+      return;
+    }
+
+    const sourceNode = state.nodes.find((n) => n.id === draft.source!.classId);
+    const targetNode = state.nodes.find((n) => n.id === targetClassId);
+    if (!sourceNode || !targetNode) {
+      set({ relationDraft: null, activeVertexPopover: null });
+      return;
+    }
+
+    const sourceClass: DiagramClassWithAttributes = {
+      id: sourceNode.id,
+      name: sourceNode.data.name,
+      positionX: sourceNode.position.x,
+      positionY: sourceNode.position.y,
+      attributes: sourceNode.data.attributes || [],
+    };
+
+    const targetClass: DiagramClassWithAttributes = {
+      id: targetNode.id,
+      name: targetNode.data.name,
+      positionX: targetNode.position.x,
+      positionY: targetNode.position.y,
+      attributes: targetNode.data.attributes || [],
+    };
+
+    const existingClasses: DiagramClass[] = state.nodes.map((n) => ({
+      id: n.id,
+      name: n.data.name,
+      positionX: n.position.x,
+      positionY: n.position.y,
+    }));
+
+    const aggregate = planRelationCreation({
+      sourceClass,
+      targetClass,
+      relationType: draft.selectedRelationType || "GENERALIZATION",
+      sourceCardinality: null,
+      targetCardinality: null,
+      sourceHandle: draft.source.handle,
+      targetHandle,
+      existingClasses,
+    });
+
+    if (typeof window !== "undefined" && state.projectId && state.viewerId) {
+      try {
+        await diagramOperationQueueRepositoryImpl.enqueue({
+          operationId: crypto.randomUUID(),
+          viewerId: state.viewerId,
+          projectId: state.projectId,
+          kind: "CREATE_RELATION",
+          classId: aggregate.relation.source.classId,
+          payload: {
+            id: aggregate.relation.id,
+            name: aggregate.relation.name,
+            relationType: aggregate.relation.relationType,
+            source: aggregate.relation.source,
+            target: aggregate.relation.target,
+            materialization: aggregate.materialization,
+          },
+          createdAt: new Date().toISOString(),
+          attempts: 0,
+          state: "pending",
+        });
+        window.dispatchEvent(new CustomEvent("diagram:process-queue"));
+      } catch (err) {
+        console.error("Error encolando creación de relación estructural:", err);
+      }
+    }
+
+    state.addOptimisticRelationAggregate(aggregate);
+    set({
+      relationDraft: null,
+      activeVertexPopover: null,
+    });
+  },
+
 
   setRelations: (relations) => set({ relations }),
 

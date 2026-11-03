@@ -68,44 +68,15 @@ function getDirectionVector(pos: Position): { dx: number; dy: number } {
 }
 
 /**
- * Calcula los puntos de inicio y fin del path de la arista desplazándolos
- * hacia el exterior de las tarjetas para alojar los símbolos UML (rombos, triángulos, flechas)
- * sin que queden cubiertos por los nodos ni que la línea atraviese el interior del símbolo.
+ * Calcula los puntos de inicio y fin del path de la arista.
+ * Con los marcadores SVG anclados en su vértice de conexión (refX alineado),
+ * la arista conecta directamente hasta el borde de cada clase sin dejar ningún espacio o gap.
  */
 export function calculateEndpointOffsets({
   sourceX,
   sourceY,
   targetX,
   targetY,
-  sourcePosition,
-  targetPosition,
-  relationType,
 }: CalculateEndpointOffsetsParams): OffsetEndpoints {
-  const { sourceSize, targetSize } = getSymbolSizes(relationType);
-
-  if (sourceSize === 0 && targetSize === 0) {
-    return { sourceX, sourceY, targetX, targetY };
-  }
-
-  const dist = Math.hypot(targetX - sourceX, targetY - sourceY);
-  const totalRequired = sourceSize + targetSize;
-
-  // Si los nodos están muy próximos, atenuar suavemente para no cruzar o invertir el path
-  const scale =
-    dist < totalRequired * 1.5
-      ? Math.max(0, Math.min(1, (dist - 4) / totalRequired))
-      : 1;
-
-  const effSourceSize = sourceSize * scale;
-  const effTargetSize = targetSize * scale;
-
-  const srcDir = getDirectionVector(sourcePosition);
-  const tgtDir = getDirectionVector(targetPosition);
-
-  return {
-    sourceX: sourceX + effSourceSize * srcDir.dx,
-    sourceY: sourceY + effSourceSize * srcDir.dy,
-    targetX: targetX + effTargetSize * tgtDir.dx,
-    targetY: targetY + effTargetSize * tgtDir.dy,
-  };
+  return { sourceX, sourceY, targetX, targetY };
 }

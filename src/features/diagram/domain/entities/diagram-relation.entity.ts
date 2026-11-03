@@ -10,7 +10,7 @@ export type DiagramRelationType =
   | 'REALIZATION'
   | 'DEPENDENCY';
 
-export type DiagramCardinality = '0..1' | '1' | '0..*' | '1..*';
+export type DiagramCardinality = '1..1' | '0..1' | '0..*' | '1..*' | '1';
 
 export type DiagramRelationHandle =
   | 'TOP_LEFT'
@@ -200,3 +200,132 @@ export function isSelfReferencingRelation(relation: {
 }): boolean {
   return relation.source.classId === relation.target.classId;
 }
+
+export type RelationCreationPhase =
+  | 'idle'
+  | 'source_popover_open'
+  | 'tracking_cursor'
+  | 'target_popover_open';
+
+export type VertexAnchor = {
+  classId: string;
+  handle: DiagramRelationHandle;
+  flowPosition: { x: number; y: number };
+};
+
+export type VertexPopoverAnchor = {
+  classId: string;
+  handleId: DiagramRelationHandle;
+  step: 'source' | 'target';
+  screenPosition: { x: number; y: number };
+  flowPosition: { x: number; y: number };
+};
+
+export type RelationCreationDraft = {
+  phase: RelationCreationPhase;
+  source: VertexAnchor | null;
+  selectedRelationType: DiagramRelationType | null;
+  sourceCardinality: DiagramCardinality | null;
+  target: VertexAnchor | null;
+  targetCardinality: DiagramCardinality | null;
+  currentCursorPosition: { x: number; y: number } | null;
+  activePopover: VertexPopoverAnchor | null;
+};
+
+export type VertexOptionCategory = 'cardinality' | 'structural_head';
+
+export type VertexOptionIconType =
+  | 'rombo_relleno'
+  | 'rombo_vacio'
+  | 'flecha_triangular'
+  | 'flecha_discontinua'
+  | 'flecha_abierta';
+
+export type VertexOptionItem = {
+  id: string;
+  category: VertexOptionCategory;
+  label: string;
+  badge?: string;
+  relationType: DiagramRelationType;
+  cardinality?: DiagramCardinality;
+  iconType?: VertexOptionIconType;
+};
+
+export const TARGET_CARDINALITY_OPTIONS: readonly VertexOptionItem[] = [
+  {
+    id: 'card_1',
+    category: 'cardinality',
+    label: 'Uno a uno',
+    badge: '1..1',
+    relationType: 'ASSOCIATION',
+    cardinality: '1',
+  },
+  {
+    id: 'card_0_1',
+    category: 'cardinality',
+    label: 'Cero a uno',
+    badge: '0..1',
+    relationType: 'ASSOCIATION',
+    cardinality: '0..1',
+  },
+  {
+    id: 'card_0_many',
+    category: 'cardinality',
+    label: 'Cero a muchos',
+    badge: '0..*',
+    relationType: 'ASSOCIATION',
+    cardinality: '0..*',
+  },
+  {
+    id: 'card_1_many',
+    category: 'cardinality',
+    label: 'Uno a muchos',
+    badge: '1..*',
+    relationType: 'ASSOCIATION',
+    cardinality: '1..*',
+  },
+] as const;
+
+export const SOURCE_VERTEX_OPTIONS: readonly VertexOptionItem[] = [
+  ...TARGET_CARDINALITY_OPTIONS,
+  {
+    id: 'head_composition',
+    category: 'structural_head',
+    label: 'Composición',
+    relationType: 'COMPOSITION',
+    iconType: 'rombo_relleno',
+  },
+  {
+    id: 'head_aggregation',
+    category: 'structural_head',
+    label: 'Agregación',
+    relationType: 'AGGREGATION',
+    iconType: 'rombo_vacio',
+  },
+  {
+    id: 'head_generalization',
+    category: 'structural_head',
+    label: 'Herencia',
+    relationType: 'GENERALIZATION',
+    iconType: 'flecha_triangular',
+  },
+  {
+    id: 'head_realization',
+    category: 'structural_head',
+    label: 'Realización',
+    relationType: 'REALIZATION',
+    iconType: 'flecha_discontinua',
+  },
+  {
+    id: 'head_dependency',
+    category: 'structural_head',
+    label: 'Dependencia',
+    relationType: 'DEPENDENCY',
+    iconType: 'flecha_abierta',
+  },
+] as const;
+
+export function isStructuralRelationType(relationType: DiagramRelationType): boolean {
+  return relationType !== 'ASSOCIATION';
+}
+

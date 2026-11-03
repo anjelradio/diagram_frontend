@@ -38,13 +38,17 @@ export function useInBrowserStt({
   }, []);
 
   const cancelSession = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+    if (mediaRecorderRef.current) {
       try {
-        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current.onstop = null;
+        if (mediaRecorderRef.current.state !== "inactive") {
+          mediaRecorderRef.current.stop();
+        }
       } catch {
         // Ignorar errores al detener si ya estaba cerrado
       }
     }
+    audioChunksRef.current = [];
     cleanupStream();
     setState({ status: "idle" });
   }, [cleanupStream]);

@@ -11,8 +11,7 @@ import {
 } from "lucide-react";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
 import { cn } from "@/lib/utils";
-import { useAppStore } from "@/features/shared/presentation/store/app-store";
-import { RelationPickerPopover } from "@/features/diagram/presentation/components/elements/diagram-canvas/relations/relation-picker-popover";
+
 
 export type CanvasTool =
   | "cursor"
@@ -38,10 +37,6 @@ export function ProjectCanvasToolbar({
   canEdit = false,
   onSelectTool,
 }: ProjectCanvasToolbarProps) {
-  const isRelationPickerOpen = useAppStore((s) => s.isRelationPickerOpen);
-  const setRelationPickerOpen = useAppStore((s) => s.setRelationPickerOpen);
-  const activeRelationPreset = useAppStore((s) => s.activeRelationPreset);
-
   if (!canEdit) {
     return null;
   }
@@ -50,11 +45,7 @@ export function ProjectCanvasToolbar({
   const isCursorActive = !isTemporaryHand && activeTool === "cursor";
   const isSelectActive = !isTemporaryHand && activeTool === "select";
   const isCreateClassActive = !isTemporaryHand && activeTool === "create-class";
-  const isRelationActive =
-    !isTemporaryHand &&
-    (activeTool === "relation" ||
-      isRelationPickerOpen ||
-      activeRelationPreset !== null);
+  const isRelationActive = !isTemporaryHand && activeTool === "relation";
 
   const getButtonClass = (isActive: boolean) =>
     cn(
@@ -66,9 +57,6 @@ export function ProjectCanvasToolbar({
 
   return (
     <div className="fixed right-5 top-1/2 -translate-y-1/2 z-30 flex items-center gap-3 pointer-events-auto">
-      {/* Panel Flotante de Relaciones UML */}
-      <RelationPickerPopover />
-
       {/* Barra vertical de herramientas (Pill) */}
       <aside aria-label="Herramientas del lienzo">
         <div className="bg-[#191a1d] border border-white/10 shadow-xl rounded-full p-1.5 flex flex-col items-center gap-1.5 flex-shrink-0">
@@ -91,9 +79,9 @@ export function ProjectCanvasToolbar({
             <button
               type="button"
               data-relation-toolbar-button="true"
-              onClick={() => {
-                setRelationPickerOpen(!isRelationPickerOpen);
-              }}
+              onClick={() =>
+                onSelectTool(activeTool === "relation" ? "cursor" : "relation")
+              }
               className={getButtonClass(isRelationActive)}
               title="Relaciones UML (R)"
               aria-label="Relaciones UML (R)"
@@ -102,6 +90,7 @@ export function ProjectCanvasToolbar({
               <Network className="w-4 h-4" />
             </button>
           )}
+
 
         {/* Separador */}
         <div className="w-5 h-[1px] bg-white/15 my-0.5 rounded-full" />

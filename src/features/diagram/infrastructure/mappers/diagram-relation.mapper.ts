@@ -2,12 +2,23 @@ import type {
   CreateRelationPayload,
   RenameRelationPayload,
 } from "../../domain/entities/diagram-operation.entity";
-import type { DiagramRelation } from "../../domain/entities/diagram-relation.entity";
+import type {
+  DiagramCardinality,
+  DiagramRelation,
+} from "../../domain/entities/diagram-relation.entity";
 import type {
   CreateRelationRequestDto,
   DiagramRelationReadDto,
   RenameRelationRequestDto,
 } from "../schemas/diagram-relation.schemas";
+
+function mapCardinalityToDto(
+  cardinality: DiagramCardinality | null
+): "0..1" | "1" | "0..*" | "1..*" | null {
+  if (!cardinality) return null;
+  if (cardinality === "1..1" || cardinality === "1") return "1";
+  return cardinality;
+}
 
 export function mapDiagramRelationToEntity(
   dto: DiagramRelationReadDto
@@ -50,12 +61,12 @@ export function mapCreateRelationPayloadToRequest(
     source: {
       class_id: payload.source.classId,
       handle: payload.source.handle,
-      cardinality: payload.source.cardinality,
+      cardinality: mapCardinalityToDto(payload.source.cardinality),
     },
     target: {
       class_id: payload.target.classId,
       handle: payload.target.handle,
-      cardinality: payload.target.cardinality,
+      cardinality: mapCardinalityToDto(payload.target.cardinality),
     },
     materialization: {
       strategy: payload.materialization.strategy,

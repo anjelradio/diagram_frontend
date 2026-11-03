@@ -1,10 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   RELATION_HANDLE_CONFIGS,
   getHandleConfig,
 } from "./relation-handles-config.ts";
 import { ALL_RELATION_HANDLES } from "../../../../../domain/entities/diagram-relation.entity.ts";
+
 
 describe("RelationHandles - Configuración de 12 puntos de anclaje", () => {
   it("define exactamente doce handles únicos coincidentes con ALL_RELATION_HANDLES", () => {
@@ -43,4 +45,21 @@ describe("RelationHandles - Configuración de 12 puntos de anclaje", () => {
     assert.equal(leftBottom.side, "left");
     assert.equal(leftBottom.offset, "75%");
   });
+
+  it("verifica que los handles capturan clics interactivos en modo de relación", () => {
+    const source = readFileSync(
+      new URL("./relation-handles.tsx", import.meta.url),
+      "utf8"
+    );
+    assert.match(source, /openVertexMenu/);
+    assert.match(source, /onClick/);
+    assert.match(source, /onPointerDown/);
+    assert.match(source, /onMouseDown/);
+    assert.match(source, /screenToFlowPosition/);
+    assert.match(source, /!pointer-events-auto/);
+    assert.match(source, /before:-inset-/);
+    assert.match(source, /scale\(\$\{zoomScale\}\)/);
+  });
 });
+
+

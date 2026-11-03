@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 const source = readFileSync(new URL("./agent-chat-widget.tsx", import.meta.url), "utf8");
+const headerSource = readFileSync(new URL("./agent-chat-header.tsx", import.meta.url), "utf8");
 
 test("AgentChatWidget implementa animación fluida y bordes redondeados", () => {
   assert.match(source, /transition-all duration-300/);
@@ -17,21 +18,20 @@ test("AgentChatWidget maneja la tecla Escape para colapsar", () => {
   assert.match(source, /window\.addEventListener\("keydown"/);
 });
 
-test("AgentChatWidget alterna entre botón y cabecera según el estado de apertura", () => {
-  assert.match(source, /AgentTriggerButton/);
+test("AgentChatWidget unifica el disparador colapsado y la ventana expandida en un solo contenedor continuo", () => {
   assert.match(source, /AgentChatHeader/);
-  assert.match(source, /chat\.isOpen/);
+  assert.match(source, /isOpen=\{chat\.isOpen\}/);
+  assert.match(headerSource, /EyeTracker/);
+  assert.match(headerSource, /size=\{44\}/);
 });
 
-test("AgentChatWidget integra AgentChatMessageList y AgentChatInput", () => {
+test("AgentChatWidget integra AgentChatMessageList y AgentChatInput con soporte multimodal", () => {
   assert.match(source, /AgentChatMessageList/);
   assert.match(source, /AgentChatInput/);
-  assert.match(source, /onSend={chat\.sendMessage}/);
-});
-
-test("AgentChatWidget no sobredimensiona el botón durante el colapso", () => {
-  assert.doesNotMatch(source, /AgentTriggerButton[^>]*className="w-full h-full"/);
-  assert.match(source, /!chat\.isOpen \? \(/);
+  assert.match(source, /draftAttachment=\{chat\.draftAttachment\}/);
+  assert.match(source, /onRemoveAttachment=\{chat\.removeDraftAttachment\}/);
+  assert.match(source, /onPreviewAttachment=\{chat\.openModalImage\}/);
+  assert.match(source, /ImageViewerModal/);
 });
 
 test("AgentChatWidget se expande verticalmente hacia abajo con altura completa", () => {
@@ -43,13 +43,10 @@ test("AgentChatWidget aplica el color de superficie #191a1d", () => {
   assert.match(source, /bg-\[#191a1d\]/);
 });
 
-test("AgentChatWidget integra useInBrowserStt y pasa sttState a AgentChatInput", () => {
+test("AgentChatWidget integra useInBrowserStt y cancelación de audio", () => {
   assert.match(source, /useInBrowserStt/);
   assert.match(source, /sttState=\{stt\.state\}/);
   assert.match(source, /onPauseClick/);
+  assert.match(source, /onCancelVoiceClick/);
   assert.match(source, /stt\.cancelSession\(\)/);
 });
-
-
-
-

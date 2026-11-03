@@ -11,6 +11,8 @@ export interface AgentChatMessageListProps {
   messages: ChatMessage[];
   /** ID del usuario actual para discriminar mensajes propios vs colaboradores */
   currentUserId?: string;
+  /** Callback opcional al hacer clic en una imagen adjunta */
+  onImageClick?: (url: string) => void;
   /** Clases CSS para el contenedor con scroll */
   className?: string;
 }
@@ -18,6 +20,7 @@ export interface AgentChatMessageListProps {
 export function AgentChatMessageList({
   messages,
   currentUserId = "current-user",
+  onImageClick,
   className,
 }: AgentChatMessageListProps) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -73,6 +76,7 @@ export function AgentChatMessageList({
               <AgentChatBubble
                 message={message}
                 isCurrentUser={isCurrentUser}
+                onImageClick={onImageClick}
               />
             )}
           </div>

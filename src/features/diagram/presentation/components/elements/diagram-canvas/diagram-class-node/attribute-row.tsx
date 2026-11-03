@@ -210,38 +210,11 @@ export const AttributeRow = memo(function AttributeRow({
       <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-3">
         {isPk ? (
           <span
-            title={
-              isFk
-                ? "Llave primaria compartida (UUID inmutable por generalización)"
-                : "Llave primaria (UUID inmutable)"
-            }
-            className={cn(
-              "inline-flex h-[18px] items-center justify-center gap-1 rounded-md px-1.5 text-[9px] font-sans font-semibold tracking-[-0.01em] flex-shrink-0 select-none shadow-sm",
-              isFk && isPk
-                ? "text-slate-100 shadow-violet-950/20"
-                : isFk
-                  ? "bg-indigo-500/30 text-indigo-300 shadow-indigo-950/20"
-                  : "bg-orange-500/30 text-amber-300 shadow-orange-950/20"
-            )}
-            style={
-              isFk && isPk
-                ? {
-                    background:
-                      "linear-gradient(90deg, rgb(249 115 22 / 0.3) 0%, rgb(129 140 248 / 0.3) 100%)",
-                  }
-                : undefined
-            }
+            title="Llave primaria (UUID inmutable)"
+            className="inline-flex h-[18px] items-center justify-center gap-1 rounded-md px-1.5 text-[9px] font-sans font-semibold tracking-[-0.01em] flex-shrink-0 select-none shadow-sm bg-orange-500/30 text-amber-300 shadow-orange-950/20"
           >
             <KeyRound className="h-2.5 w-2.5" strokeWidth={2} />
-            {isFk ? (
-              <span>
-                <span className="text-amber-300">PK</span>
-                <span className="text-slate-400"> / </span>
-                <span className="text-indigo-300">FK</span>
-              </span>
-            ) : (
-              <span>PK</span>
-            )}
+            <span>PK</span>
           </span>
         ) : isFk ? (
           <span

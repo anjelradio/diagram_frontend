@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import type {
   ChatMessage,
   ChatMessageSender,
+  ChatMessageAttachment,
 } from "../../domain/entities/chat-message.entity";
+import type { MultimodalDraftAttachment } from "../../domain/entities/multimodal-draft.entity";
+import { appToast } from "@/features/shared/presentation/components/notifications/toast";
 
 export interface UseAgentChatOptions {
   initialOpen?: boolean;
@@ -20,10 +23,17 @@ export interface UseAgentChatReturn {
   messages: ChatMessage[];
   inputText: string;
   setInputText: (text: string) => void;
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string, attachment?: MultimodalDraftAttachment | null) => void;
   isRecording: boolean;
   toggleRecording: () => void;
   appendTranscribedText: (transcribed: string) => void;
+  draftAttachment: MultimodalDraftAttachment | null;
+  setDraftAttachment: (attachment: MultimodalDraftAttachment | null) => void;
+  attachImageFile: (file: File) => boolean;
+  removeDraftAttachment: () => void;
+  activeModalImageUrl: string | null;
+  openModalImage: (url: string) => void;
+  closeModalImage: () => void;
 }
 
 function formatSimpleTime(date: Date): string {
@@ -48,6 +58,14 @@ const DEFAULT_WELCOME_MESSAGES: ChatMessage[] = [
   },
 ];
 
+const SUPPORTED_IMAGE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+];
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
+
 export function useAgentChat(options: UseAgentChatOptions = {}): UseAgentChatReturn {
   const {
     initialOpen = false,
@@ -57,25 +75,22 @@ export function useAgentChat(options: UseAgentChatOptions = {}): UseAgentChatRet
   } = options;
 
   const [isOpen, setIsOpen] = useState<boolean>(initialOpen);
-  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    const now = new Date();
+    return initialMessages.map((msg) =>
+      msg.id === "welcome-assistant-1"
+        ? {
+            ...msg,
+            timestamp: now.toISOString(),
+            formattedTime: formatSimpleTime(now),
+          }
+        : msg
+    );
+  });
   const [inputText, setInputText] = useState<string>("");
   const [isRecording, setIsRecording] = useState<boolean>(false);
-
-  // Sincronizar la hora del mensaje inicial en el cliente tras la hidratación
-  useEffect(() => {
-    const now = new Date();
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === "welcome-assistant-1"
-          ? {
-              ...msg,
-              timestamp: now.toISOString(),
-              formattedTime: formatSimpleTime(now),
-            }
-          : msg
-      )
-    );
-  }, []);
+  const [draftAttachment, setDraftAttachment] = useState<MultimodalDraftAttachment | null>(null);
+  const [activeModalImageUrl, setActiveModalImageUrl] = useState<string | null>(null);
 
   const toggleOpen = useCallback(() => {
     setIsOpen((prev) => !prev);
@@ -95,10 +110,69 @@ export function useAgentChat(options: UseAgentChatOptions = {}): UseAgentChatRet
     });
   }, []);
 
+  const attachImageFile = useCallback((file: File): boolean => {
+    if (!file) return false;
+
+    const mimeType = file.type.toLowerCase();
+    if (
+      !SUPPORTED_IMAGE_TYPES.includes(mimeType) &&
+      !mimeType.startsWith("image/")
+    ) {
+      appToast.error("Formato no compatible. Usa PNG, JPEG o WEBP.");
+      return false;
+    }
+
+    if (file.size === 0) {
+      appToast.error("El archivo seleccionado está vacío.");
+      return false;
+    }
+
+    if (file.size > MAX_IMAGE_SIZE) {
+      appToast.error("La imagen excede el tamaño máximo permitido (10 MB).");
+      return false;
+    }
+
+    setDraftAttachment((prev) => {
+      if (prev?.previewUrl) {
+        URL.revokeObjectURL(prev.previewUrl);
+      }
+      const previewUrl = URL.createObjectURL(file);
+      return {
+        id: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        file,
+        previewUrl,
+        name: file.name,
+        mimeType: file.type || "image/png",
+        sizeBytes: file.size,
+      };
+    });
+
+    return true;
+  }, []);
+
+  const removeDraftAttachment = useCallback(() => {
+    setDraftAttachment((prev) => {
+      if (prev?.previewUrl) {
+        URL.revokeObjectURL(prev.previewUrl);
+      }
+      return null;
+    });
+  }, []);
+
+  const openModalImage = useCallback((url: string) => {
+    setActiveModalImageUrl(url);
+  }, []);
+
+  const closeModalImage = useCallback(() => {
+    setActiveModalImageUrl(null);
+  }, []);
+
   const sendMessage = useCallback(
-    (text: string) => {
+    (text: string, attachment?: MultimodalDraftAttachment | null) => {
       const trimmed = text.trim();
-      if (!trimmed) return;
+      const currentAttachment = attachment !== undefined ? attachment : draftAttachment;
+
+      if (!trimmed && !currentAttachment) return;
 
       const now = new Date();
       const userSender: ChatMessageSender = {
@@ -108,6 +182,18 @@ export function useAgentChat(options: UseAgentChatOptions = {}): UseAgentChatRet
         role: "user",
       };
 
+      const attachments: ChatMessageAttachment[] = currentAttachment
+        ? [
+            {
+              id: currentAttachment.id,
+              type: "image",
+              url: currentAttachment.previewUrl,
+              name: currentAttachment.name,
+              sizeBytes: currentAttachment.sizeBytes,
+            },
+          ]
+        : [];
+
       const userMessage: ChatMessage = {
         id: typeof crypto !== "undefined" && crypto.randomUUID
           ? crypto.randomUUID()
@@ -116,10 +202,12 @@ export function useAgentChat(options: UseAgentChatOptions = {}): UseAgentChatRet
         content: trimmed,
         timestamp: now.toISOString(),
         formattedTime: formatSimpleTime(now),
+        attachments: attachments.length > 0 ? attachments : undefined,
       };
 
       setMessages((prev) => [...prev, userMessage]);
       setInputText("");
+      setDraftAttachment(null);
 
       // Simulación de respuesta minimalista del asistente
       setTimeout(() => {
@@ -133,15 +221,16 @@ export function useAgentChat(options: UseAgentChatOptions = {}): UseAgentChatRet
             name: "Asistente IA",
             role: "assistant",
           },
-          content:
-            "He recibido tu indicación. Por el momento esta es una interfaz de vista previa interactiva.",
+          content: attachments.length > 0
+            ? "He recibido tu imagen y la indicación. Analizando estructura visual del diagrama..."
+            : "He recibido tu indicación. Por el momento esta es una interfaz de vista previa interactiva.",
           timestamp: aiNow.toISOString(),
           formattedTime: formatSimpleTime(aiNow),
         };
         setMessages((prev) => [...prev, aiMessage]);
       }, 500);
     },
-    [currentUserId, currentUserName]
+    [currentUserId, currentUserName, draftAttachment]
   );
 
   return {
@@ -155,5 +244,12 @@ export function useAgentChat(options: UseAgentChatOptions = {}): UseAgentChatRet
     isRecording,
     toggleRecording,
     appendTranscribedText,
+    draftAttachment,
+    setDraftAttachment,
+    attachImageFile,
+    removeDraftAttachment,
+    activeModalImageUrl,
+    openModalImage,
+    closeModalImage,
   };
 }

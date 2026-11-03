@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   ArrowUpRight,
   Loader2,
@@ -8,6 +8,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { ReactFlowProvider } from "@xyflow/react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useGenerateBackend } from "@/features/code-generation/presentation/hooks/use-generate-backend";
 import { useExportProject } from "@/features/projects/presentation/hooks/use-export-project";
 import { CODE_GENERATION_MESSAGES } from "@/features/code-generation/presentation/constants/code-generation.messages";
@@ -40,8 +41,12 @@ import { useDiagramRealtimeBridge } from "@/features/diagram/presentation/hooks/
 import type {
   AssistantVisualState,
 } from "@/features/assistant/domain/entities/agent-activity.entity";
+import type { MultimodalDraftAttachment } from "@/features/assistant/domain/entities/multimodal-draft.entity";
 import { AgentChatWidget } from "@/features/assistant/presentation/components/elements/chat/agent-chat-widget";
-import { useImageImporter } from "@/features/assistant/presentation/hooks/use-image-importer";
+import { AssistantFloatingDock } from "@/features/assistant/presentation/components/elements/dock/assistant-floating-dock";
+import { useAgentChat } from "@/features/assistant/presentation/hooks/use-agent-chat";
+import { useInBrowserStt } from "@/features/assistant/presentation/hooks/use-in-browser-stt";
+import { assistantRepositoryImpl } from "@/features/assistant/infrastructure/repositories/http-assistant.repository";
 
 type ProjectCanvasViewProps = {
   project: ProjectDetail;
@@ -83,17 +88,63 @@ export function ProjectCanvasView({
     void refreshSnapshot();
   }, [refreshSnapshot]);
 
-  const {
-    isSending: isImageSending,
-    fileInputRef,
-    openFilePicker,
-    onFileInputChange,
-  } = useImageImporter({
-    projectId: currentProject.id,
-    onSuccess: handleAiSuccess,
+  // Hook centralizado de conversación y multimodalidad del asistente
+  const chat = useAgentChat();
+
+  // Hook de reconocimiento por voz STT en navegador
+  const stt = useInBrowserStt({
+    onTranscribeSuccess: (transcribedText) => {
+      chat.appendTranscribedText(transcribedText);
+    },
   });
 
-  const isAiProcessing = isAgentLocked || isImageSending;
+  const [isSendingMultimodal, setIsSendingMultimodal] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const openFilePicker = useCallback(() => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  }, []);
+
+  const handleFileInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        chat.attachImageFile(file);
+      }
+    },
+    [chat]
+  );
+
+  const handleSendMessage = useCallback(
+    async (text: string, attachment?: MultimodalDraftAttachment | null) => {
+      const activeAttachment = attachment || chat.draftAttachment;
+      chat.sendMessage(text, activeAttachment);
+
+      if (activeAttachment?.file) {
+        try {
+          setIsSendingMultimodal(true);
+          const result = await assistantRepositoryImpl.sendImageCommand({
+            projectId: currentProject.id,
+            imageBlob: activeAttachment.file,
+            mimeType: activeAttachment.mimeType,
+          });
+          if (result.ok) {
+            handleAiSuccess();
+          }
+        } catch (error) {
+          console.error("Error al despachar imagen al asistente:", error);
+        } finally {
+          setIsSendingMultimodal(false);
+        }
+      }
+    },
+    [chat, currentProject.id, handleAiSuccess]
+  );
+
+  const isAiProcessing = isAgentLocked || isSendingMultimodal;
   const canEdit = capabilities.canEditDiagram && !isAiProcessing;
 
   const assistantVisualState: AssistantVisualState =
@@ -211,14 +262,14 @@ export function ProjectCanvasView({
         return;
       }
 
-      // R: Alternar catálogo / herramienta de relaciones UML (condicionada a canEdit)
+      // R: Alternar herramienta de relaciones UML (condicionada a canEdit)
       if (e.key.toLowerCase() === "r") {
         if (canEdit) {
-          const store = useAppStore.getState();
-          store.setRelationPickerOpen(!store.isRelationPickerOpen);
+          handleSelectTool(activeTool === "relation" ? "cursor" : "relation");
         }
         return;
       }
+
 
       // ⌘E / Ctrl+E: Exportar proyecto a archivo XMI
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "e") {
@@ -260,6 +311,8 @@ export function ProjectCanvasView({
       {/* Widget expandible del Asistente IA (bajo el menú de 3 líneas) */}
       <div className="fixed top-[58px] left-5 z-40 pointer-events-auto">
         <AgentChatWidget
+          chat={chat}
+          stt={stt}
           visualState={assistantVisualState}
           canInteract={capabilities.canEditDiagram && !isAiProcessing}
           onImageSelect={openFilePicker}
@@ -269,7 +322,7 @@ export function ProjectCanvasView({
         <input
           type="file"
           ref={fileInputRef}
-          onChange={onFileInputChange}
+          onChange={handleFileInputChange}
           accept="image/png,image/jpeg,image/jpg,image/webp"
           className="hidden"
           aria-hidden="true"
@@ -410,9 +463,38 @@ export function ProjectCanvasView({
         {/* Izquierda: Espacio reservado para balance de 3 columnas */}
         <div className="flex-1 flex justify-start" />
 
-        {/* Centro: Píldora de orientación contextual */}
-        <div className="flex-1 flex justify-center pointer-events-none">
+        {/* Centro: Píldora de orientación contextual y Dock flotante inferior del asistente */}
+        <div className="flex-1 flex flex-col items-center gap-2 pointer-events-none">
           <RelationGuidancePill />
+          <AnimatePresence>
+            {capabilities.canEditDiagram && !chat.isOpen && (
+              <motion.div
+                key="assistant-floating-dock-wrapper"
+                initial={{ y: 36, opacity: 0, scale: 0.94 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={{ y: 36, opacity: 0, scale: 0.94 }}
+                transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                className="pointer-events-auto"
+              >
+                <AssistantFloatingDock
+                  value={chat.inputText}
+                  onChange={chat.setInputText}
+                  onSend={handleSendMessage}
+                  onAudioStart={stt.handleRecordClick}
+                  onAudioStop={stt.handlePauseClick}
+                  onAudioCancel={stt.cancelSession}
+                  onImageAttachClick={openFilePicker}
+                  onImageFileSelected={(file) => chat.attachImageFile(file)}
+                  draftAttachment={chat.draftAttachment}
+                  onRemoveAttachment={chat.removeDraftAttachment}
+                  onPreviewAttachment={chat.openModalImage}
+                  sttState={stt.state}
+                  canEdit={canEdit}
+                  isProcessing={isAiProcessing}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Derecha: Deshacer / Rehacer y Porcentaje de Zoom */}
