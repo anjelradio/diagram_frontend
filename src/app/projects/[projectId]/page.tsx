@@ -54,6 +54,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
       initialMembers={initialMembers}
       initialSnapshot={initialSnapshot}
       viewerId={viewerId}
+      viewerAvatarUrl={session?.user?.image ?? null}
     />
   );
 }

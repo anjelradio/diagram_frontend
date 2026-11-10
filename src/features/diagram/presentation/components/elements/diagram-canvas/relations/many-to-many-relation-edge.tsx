@@ -17,6 +17,7 @@ import { getCardinalityLabels, getRelationEdgeVisuals, shouldRenderRelationName 
 import { getSelfLoopPath } from "./relation-path-utils";
 import { RelationNameEditor } from "./relation-name-editor";
 import { getHandlePoint } from "./relation-handle-geometry";
+import { AgentReservationIndicator } from "@/features/realtime/presentation/components/elements/agent-reservation-indicator";
 
 function getCardinalityOffset(pos: Position) {
   switch (pos) {
@@ -63,6 +64,9 @@ export const ManyToManyRelationEdge = memo(function ManyToManyRelationEdge({
   const targetNode = useInternalNode(relation?.target.classId ?? "");
   const bridgeNode = useInternalNode(bridgeClassId);
   const setSelectedRelationId = useAppStore((s) => s.setSelectedRelationId);
+  const effectiveReservation = useAppStore((s) =>
+    relation ? s.getEffectiveComponentReservation(relation.id, "relation") : null
+  );
 
   const sourcePoint = sourceNode && relation
     ? getHandlePoint(sourceNode, relation.source.handle)
@@ -176,8 +180,16 @@ export const ManyToManyRelationEdge = memo(function ManyToManyRelationEdge({
       <path
         d={mainPath}
         fill="none"
-        stroke={visuals.stroke}
-        strokeWidth={visuals.strokeWidth}
+        stroke={
+          isSelected
+            ? visuals.stroke
+            : effectiveReservation?.activityType === "edit"
+              ? "#a855f7"
+              : effectiveReservation?.activityType === "query"
+                ? "#38bdf8"
+                : visuals.stroke
+        }
+        strokeWidth={effectiveReservation ? visuals.strokeWidth + 0.5 : visuals.strokeWidth}
         strokeLinecap="round"
         strokeLinejoin="round"
         style={style}
@@ -189,8 +201,16 @@ export const ManyToManyRelationEdge = memo(function ManyToManyRelationEdge({
         <path
           d={branchPath}
           fill="none"
-          stroke={visuals.stroke}
-          strokeWidth={visuals.strokeWidth}
+          stroke={
+            isSelected
+              ? visuals.stroke
+              : effectiveReservation?.activityType === "edit"
+                ? "#a855f7"
+                : effectiveReservation?.activityType === "query"
+                  ? "#38bdf8"
+                  : visuals.stroke
+          }
+          strokeWidth={effectiveReservation ? visuals.strokeWidth + 0.5 : visuals.strokeWidth}
           strokeLinecap="round"
           strokeLinejoin="round"
           style={style}
@@ -203,11 +223,32 @@ export const ManyToManyRelationEdge = memo(function ManyToManyRelationEdge({
         cx={centerX}
         cy={centerY}
         r={visuals.strokeWidth + 1}
-        fill={visuals.stroke}
+        fill={
+          isSelected
+            ? visuals.stroke
+            : effectiveReservation?.activityType === "edit"
+              ? "#a855f7"
+              : effectiveReservation?.activityType === "query"
+                ? "#38bdf8"
+                : visuals.stroke
+        }
         className="pointer-events-none"
       />
 
       <EdgeLabelRenderer>
+        {/* Señal visual de reserva del agente */}
+        {effectiveReservation?.isReserved && effectiveReservation.activityType && (
+          <div
+            style={{
+              position: "absolute",
+              transform: `translate(-50%, -50%) translate(${centerX}px,${centerY - 24}px)`,
+              pointerEvents: "none",
+            }}
+          >
+            <AgentReservationIndicator activityType={effectiveReservation.activityType} />
+          </div>
+        )}
+
         {/* Cardinalidad en origen */}
         {cardinalities.source && (
           <div

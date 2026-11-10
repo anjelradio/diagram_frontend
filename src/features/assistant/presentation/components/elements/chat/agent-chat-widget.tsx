@@ -9,6 +9,7 @@ import { AgentChatInput } from "./agent-chat-input";
 import { ImageViewerModal } from "./image-viewer-modal";
 import { useAgentChat, type UseAgentChatReturn } from "@/features/assistant/presentation/hooks/use-agent-chat";
 import { useInBrowserStt } from "@/features/assistant/presentation/hooks/use-in-browser-stt";
+import { AgentQueueCard } from "../agent-queue-card";
 
 export interface AgentChatWidgetProps {
   /** Instancia compartida opcional de useAgentChat */
@@ -39,7 +40,7 @@ export function AgentChatWidget({
   className,
   children,
 }: AgentChatWidgetProps) {
-  const internalChat = useAgentChat();
+  const internalChat = useAgentChat({ enabled: !externalChat });
   const chat = externalChat ?? internalChat;
 
   const internalStt = useInBrowserStt({
@@ -82,9 +83,9 @@ export function AgentChatWidget({
           chat.isOpen
             ? "w-[calc(100vw-40px)] sm:w-[480px] h-[calc(100vh-84px)] max-h-[calc(100vh-84px)] min-h-[500px] rounded-3xl bg-[#191a1d] border border-zinc-700/80 shadow-2xl flex flex-col overflow-hidden"
             : "w-14 h-14 rounded-2xl bg-[#191a1d] border border-zinc-700/80 shadow-2xl hover:bg-[#212327] hover:border-zinc-500/80 flex flex-col p-0 cursor-pointer overflow-hidden active:scale-95",
-          visualState === "thinking" && "ring-2 ring-indigo-500 animate-pulse",
-          visualState === "recording" && "ring-2 ring-rose-500",
-          !canInteract && "opacity-50 cursor-not-allowed",
+          visualState === "thinking" && !chat.isOpen && "ring-2 ring-indigo-500",
+          visualState === "recording" && !chat.isOpen && "ring-2 ring-rose-500",
+          !canInteract && !chat.isOpen && "opacity-50 cursor-not-allowed",
           className
         )}
         onClick={!chat.isOpen && canInteract ? () => chat.setIsOpen(true) : undefined}
@@ -105,14 +106,31 @@ export function AgentChatWidget({
           <div className="flex flex-col flex-1 min-h-0 w-full animate-in fade-in duration-200 overflow-hidden">
             <AgentChatMessageList
               messages={chat.messages}
-              currentUserId="current-user"
+              currentUserId={chat.currentUserId}
               onImageClick={chat.openModalImage}
+              hasMoreHistory={chat.hasMoreHistory}
+              isHistoryLoading={chat.isHistoryLoading}
+              onLoadMore={chat.loadMoreMessages}
+              onResponseAnimationConsumed={chat.markResponseAnimationConsumed}
             />
             {children}
+            <AgentQueueCard
+              messages={chat.pendingMessages}
+              onEdit={chat.takePendingForEdit}
+              onRemove={chat.removePending}
+              isEditingPending={chat.isEditingPending}
+              className="mx-3 w-auto shrink-0"
+            />
             <AgentChatInput
               value={chat.inputText}
               onChange={chat.setInputText}
               onSend={(text) => chat.sendMessage(text, chat.draftAttachment)}
+              onStopAgent={chat.stopActive}
+              onDiscardEdit={chat.discardEdit}
+              isEditingPending={chat.isEditingPending}
+              hasActiveMessage={Boolean(chat.activeMessage)}
+              isCancelling={chat.activeMessage?.status === "cancelling"}
+              isQueueFull={chat.isQueueFull}
               sttState={stt.state}
               draftAttachment={chat.draftAttachment}
               onRemoveAttachment={chat.removeDraftAttachment}

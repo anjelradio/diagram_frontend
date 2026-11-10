@@ -1,10 +1,12 @@
 import type {
+  AgentComponentReservation,
   RealtimeClassLock,
   RealtimePresenceUser,
   RealtimeRemoteCursor,
   RealtimeServerMessage,
 } from "../../domain/entities/realtime.entity.ts";
 import type { RealtimeMessageWire } from "../schemas/realtime.schemas.ts";
+import { getAgentActivityType } from "../../../assistant/domain/entities/agent-activity.entity.ts";
 
 const colors = ["#22d3ee", "#a78bfa", "#fb7185", "#34d399", "#fbbf24", "#60a5fa"];
 
@@ -57,6 +59,24 @@ export const realtimeMapper = {
     color: realtimeColor(raw.user_id),
   }),
 
+  toAgentComponentReservation: (raw: {
+    project_id: string;
+    message_id: string;
+    sequence: number;
+    component_type: "class" | "relation";
+    component_id: string;
+    activity_type: "query" | "edit";
+    attribute_id?: string | null;
+  }): AgentComponentReservation => ({
+    projectId: raw.project_id,
+    messageId: raw.message_id,
+    sequence: raw.sequence,
+    componentType: raw.component_type,
+    componentId: raw.component_id,
+    activityType: raw.activity_type,
+    attributeId: raw.attribute_id ?? null,
+  }),
+
   toDomain(raw: RealtimeMessageWire): RealtimeServerMessage {
     switch (raw.type) {
       case "pong":
@@ -66,9 +86,9 @@ export const realtimeMapper = {
           type: "presenceSnapshot",
           peers: raw.peers.map(realtimeMapper.toPresence),
           classLocks: raw.class_locks.map(realtimeMapper.toClassLock),
-          agentLock: raw.agent_lock
-            ? { userId: raw.agent_lock.user_id, activityId: raw.agent_lock.activity_id }
-            : null,
+          agentComponentReservations: (
+            raw.agent_component_reservations ?? []
+          ).map(realtimeMapper.toAgentComponentReservation),
         };
       case "user_joined":
         return { type: "userJoined", user: realtimeMapper.toPresence(raw) };
@@ -107,18 +127,61 @@ export const realtimeMapper = {
         };
       case "role_changed":
         return { type: "roleChanged", role: raw.role };
-      case "agent_lock":
+      case "agent_message_accepted":
         return {
-          type: "agentLock",
-          userId: raw.user_id,
-          activityId: raw.activity_id,
+          type: "agentMessageAccepted",
+          message: {
+            id: raw.message_id,
+            projectId: raw.project_id,
+            userId: raw.user_id,
+            authorName: raw.author_name,
+            authorAvatarUrl: raw.author_avatar_url,
+            prompt: raw.prompt,
+            imageUrl: raw.image_url,
+            status: raw.status,
+            cancelRequested: raw.cancel_requested,
+            responseMarkdown: raw.response_markdown,
+            createdAt: raw.created_at,
+          },
         };
-      case "agent_finished":
+      case "agent_message_activity":
         return {
-          type: "agentFinished",
-          userId: raw.user_id,
-          activityId: raw.activity_id,
-          state: raw.state,
+          type: "agentMessageActivity",
+          projectId: raw.project_id,
+          messageId: raw.message_id,
+          attemptId: raw.attempt_id,
+          sequence: raw.sequence,
+          activityCode: raw.activity_code,
+          activityType: raw.activity_type ?? getAgentActivityType(raw.activity_code),
+          occurredAt: raw.occurred_at,
+        };
+      case "agent_message_finished":
+        return {
+          type: "agentMessageFinished",
+          message: {
+            id: raw.message_id,
+            projectId: raw.project_id,
+            userId: raw.user_id,
+            authorName: raw.author_name ?? raw.user_id,
+            authorAvatarUrl: raw.author_avatar_url,
+            prompt: raw.prompt,
+            imageUrl: raw.image_url,
+            status: raw.status,
+            cancelRequested: false,
+            responseMarkdown: raw.response_markdown,
+            createdAt: raw.created_at,
+          },
+        };
+      case "agent_component_reserved":
+        return {
+          type: "agentComponentReserved",
+          reservation: realtimeMapper.toAgentComponentReservation(raw),
+        };
+      case "agent_component_reservations_released":
+        return {
+          type: "agentComponentReservationsReleased",
+          projectId: raw.project_id,
+          messageId: raw.message_id,
         };
     }
   },

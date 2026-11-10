@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
-import { ArrowUp, ImagePlus, Loader2, MessageSquare, Mic } from "lucide-react";
+import { ArrowUp, Download, ImagePlus, Loader2, MessageSquare, Mic, Square } from "lucide-react";
 import { motion, type Transition } from "framer-motion";
 import { cn } from "@/lib/utils";
 import type { SttSessionState } from "@/features/assistant/domain/entities/stt-session.entity";
 import type { MultimodalDraftAttachment } from "@/features/assistant/domain/entities/multimodal-draft.entity";
-import { ImageAttachmentBadge } from "../chat/image-attachment-badge";
+import type { AgentQueueMessage } from "@/features/assistant/domain/entities/agent-queue.entity";
+import { AgentQueueCard } from "../agent-queue-card";
+import { ComposerImagePreview } from "../composer-image-preview";
 import { DockVoiceNote } from "./dock-voice-note";
 
 export interface AssistantFloatingDockProps {
@@ -38,6 +40,14 @@ export interface AssistantFloatingDockProps {
   canEdit?: boolean;
   /** Si el asistente se encuentra procesando */
   isProcessing?: boolean;
+  isCancelling?: boolean;
+  isQueueFull?: boolean;
+  isEditingPending?: boolean;
+  pendingMessages?: AgentQueueMessage[];
+  onEditPending?: (messageId: string) => void;
+  onRemovePending?: (messageId: string) => void;
+  onDiscardEdit?: () => void;
+  onStopAgent?: () => void;
   /** Placeholder para el input */
   placeholder?: string;
   /** Clases CSS adicionales */
@@ -67,6 +77,12 @@ export function AssistantFloatingDock({
   sttState,
   canEdit = true,
   isProcessing = false,
+  isCancelling = false,
+  isQueueFull = false,
+  pendingMessages = [],
+  onEditPending,
+  onRemovePending,
+  onStopAgent,
   placeholder = "Escribe una instrucción para el asistente...",
   className,
 }: AssistantFloatingDockProps) {
@@ -77,10 +93,15 @@ export function AssistantFloatingDock({
   const isInputEmpty = value.trim().length === 0;
   const hasContent = !isInputEmpty || Boolean(draftAttachment);
   const isRecording = sttState?.status === "recording";
-  const isDisabled = !canEdit || isProcessing;
+  const isTranscribing = sttState?.status === "transcribing";
+  const isDownloading = sttState?.status === "downloading" || sttState?.status === "checking_cache";
+  const isVoicePill = isRecording || isTranscribing || isDownloading;
+  const isDisabled = !canEdit;
+  const isAudioDisabled = !canEdit || isQueueFull;
+  const isSendDisabled = isDisabled || isInputEmpty || (isProcessing && isQueueFull);
 
   // El dock se expande a 2 filas si está enfocado o si ya hay texto escrito
-  const isExpandedLayout = (isFocused || !isInputEmpty) && !isRecording;
+  const isExpandedLayout = (isFocused || !isInputEmpty || Boolean(draftAttachment)) && !isVoicePill;
 
   // Autoajuste dinámico de la altura del textarea con límite máximo y scroll sutil
   useEffect(() => {
@@ -107,7 +128,7 @@ export function AssistantFloatingDock({
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (hasContent && !isDisabled) {
+    if (hasContent && !isSendDisabled) {
       onSend(value, draftAttachment);
       setIsFocused(false);
     }
@@ -149,21 +170,21 @@ export function AssistantFloatingDock({
   return (
     <div
       className={cn(
-        "relative flex flex-col items-center select-none pointer-events-auto",
+        "relative flex flex-col items-center gap-2 select-none pointer-events-auto",
+        pendingMessages.length > 0 && (isRecording || isTranscribing || isDownloading
+          ? "w-[400px] max-w-[90vw]"
+          : isExpandedLayout
+            ? "w-[520px] max-w-[90vw] sm:w-[580px]"
+            : "w-[480px] max-w-[90vw] sm:w-[520px]"),
         className
       )}
     >
-      {/* Badge píldora de imagen flotando encima del dock si existe un borrador */}
-      {draftAttachment && onRemoveAttachment && onPreviewAttachment && (
-        <div className="absolute -top-11 left-6 z-10">
-          <ImageAttachmentBadge
-            attachment={draftAttachment}
-            onRemove={onRemoveAttachment}
-            onClickImage={onPreviewAttachment}
-            disabled={isDisabled}
-          />
-        </div>
-      )}
+      <AgentQueueCard
+        messages={pendingMessages}
+        onEdit={onEditPending ?? (() => undefined)}
+        onRemove={onRemovePending ?? (() => undefined)}
+      />
+
 
       {/* Cápsula interactiva del dock flotante con layout morphing animado suave sin rebote */}
       <motion.form
@@ -171,16 +192,27 @@ export function AssistantFloatingDock({
         transition={DOCK_TRANSITION}
         onSubmit={handleSubmit}
         className={cn(
-          "bg-[#191a1d]/95 backdrop-blur-md border border-zinc-700/80 shadow-2xl transition-colors duration-200 select-none overflow-hidden",
-          isRecording
+          "w-full bg-[#191a1d]/95 backdrop-blur-md border border-zinc-700/80 shadow-2xl transition-colors duration-200 select-none overflow-hidden",
+          isVoicePill
             ? "w-[400px] max-w-[90vw] rounded-full p-2 ring-2 ring-blue-500/40"
             : isExpandedLayout
             ? "w-[520px] sm:w-[580px] max-w-[90vw] rounded-3xl p-3 flex flex-col gap-2.5"
             : "w-[480px] sm:w-[520px] max-w-[90vw] rounded-full p-2 flex items-center gap-2.5"
         )}
       >
-        {isRecording ? (
-          /* ── ESTADO 1: Grabación de Audio Activa ── */
+        {draftAttachment && onRemoveAttachment && onPreviewAttachment && !isVoicePill && (
+          <div className="flex min-h-16 items-start px-1">
+            <ComposerImagePreview
+              attachment={draftAttachment}
+              onRemove={onRemoveAttachment}
+              onPreview={onPreviewAttachment}
+              disabled={isDisabled}
+            />
+          </div>
+        )}
+
+        {isVoicePill ? (
+          /* ── ESTADO 1: Grabación / Transcripción de Audio Activa ── */
           <div className="flex items-center gap-2 w-full">
             {/* Botón imagen circular deshabilitado sin contorno */}
             <motion.div
@@ -202,7 +234,7 @@ export function AssistantFloatingDock({
               <MessageSquare className="w-4 h-4" />
             </motion.div>
 
-            {/* Componente azul de grabación VoiceNote estilo Bencho extendiéndose simultáneamente */}
+            {/* Componente azul de grabación VoiceNote o estado de transcripción/descarga */}
             <motion.div
               layout
               initial={{ opacity: 0, scale: 0.92 }}
@@ -211,11 +243,25 @@ export function AssistantFloatingDock({
               transition={DOCK_TRANSITION}
               className="flex-1 min-w-0"
             >
-              <DockVoiceNote
-                onStop={onAudioStop}
-                onCancel={onAudioCancel}
-                className="w-full"
-              />
+              {isRecording ? (
+                <DockVoiceNote
+                  onStop={onAudioStop}
+                  onCancel={onAudioCancel}
+                  className="w-full"
+                />
+              ) : isTranscribing ? (
+                <div className="h-10 px-4 rounded-full bg-blue-600 text-white flex items-center justify-center gap-2 shadow-lg backdrop-blur select-none">
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span className="text-xs font-medium tracking-wide">Transcribiendo y enviando…</span>
+                </div>
+              ) : (
+                <div className="h-10 px-4 rounded-full bg-blue-600/80 text-white flex items-center justify-center gap-2 shadow-lg backdrop-blur select-none">
+                  <Download className="w-4 h-4 animate-bounce text-white" />
+                  <span className="text-xs font-medium tracking-wide">
+                    {sttState?.status === "downloading" ? `Preparando modelo (${sttState.progress}%)…` : "Verificando modelo…"}
+                  </span>
+                </div>
+              )}
             </motion.div>
           </div>
         ) : isExpandedLayout ? (
@@ -273,25 +319,60 @@ export function AssistantFloatingDock({
                 <ImagePlus className="w-4 h-4" />
               </button>
 
-              {/* Botón dinámico de envío sin contorno */}
-              <button
-                type="submit"
-                disabled={isDisabled || !hasContent}
-                className={cn(
-                  "w-9 h-9 rounded-full flex items-center justify-center transition shadow-md active:scale-95",
-                  hasContent
-                    ? "bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer shadow-indigo-600/30"
-                    : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                )}
-                aria-label="Enviar instrucción"
-                title="Enviar instrucción (Enter)"
-              >
-                {isProcessing ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-white" />
-                ) : (
+              {isProcessing && hasContent && (
+                <button
+                  type="button"
+                  onClick={onStopAgent}
+                  disabled={isCancelling}
+                  className="flex size-8 items-center justify-center rounded-full bg-red-600 text-white shadow-md hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label={isCancelling ? "Cancelando instrucción" : "Detener respuesta del asistente"}
+                  title={isCancelling ? "Cancelando…" : "Detener respuesta del asistente"}
+                >
+                  {isCancelling ? <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : <Square className="size-3.5 fill-current" />}
+                </button>
+              )}
+
+              {/* Botón dinámico único en el extremo derecho */}
+              {hasContent ? (
+                <button
+                  type="submit"
+                  disabled={isSendDisabled}
+                  className={cn(
+                    "w-9 h-9 rounded-full flex items-center justify-center transition shadow-md active:scale-95",
+                    !isSendDisabled
+                      ? "bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer shadow-indigo-600/30"
+                      : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                  )}
+                  aria-label={isProcessing ? "Añadir mensaje a la cola" : "Enviar instrucción"}
+                  title={isInputEmpty ? "Escribe una instrucción para enviar la imagen" : isQueueFull ? "La cola está llena (máx 3)" : (isProcessing ? "Añadir mensaje a la cola (Enter)" : "Enviar instrucción (Enter)")}
+                >
                   <ArrowUp className="w-4 h-4" />
-                )}
-              </button>
+                </button>
+              ) : isProcessing ? (
+                <button
+                  type="button"
+                  onClick={onStopAgent}
+                  disabled={isCancelling}
+                  className="flex size-9 items-center justify-center rounded-full bg-red-600 text-white shadow-md hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label={isCancelling ? "Cancelando instrucción" : "Detener respuesta del asistente"}
+                  title={isCancelling ? "Cancelando…" : "Detener"}
+                >
+                  {isCancelling ? (
+                    <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                  ) : (
+                    <Square className="size-3.5 fill-current" />
+                  )}
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled
+                  className="w-9 h-9 rounded-full flex items-center justify-center bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                  aria-label="Enviar instrucción"
+                >
+                  <ArrowUp className="w-4 h-4" />
+                </button>
+              )}
             </motion.div>
           </>
         ) : (
@@ -342,30 +423,58 @@ export function AssistantFloatingDock({
               />
             </motion.div>
 
-            {/* Lado derecho: Botón circular de audio (azul) o envío sin contorno */}
-            <motion.div layout transition={DOCK_TRANSITION}>
+            {/* Lado derecho: Botón circular dinámico único */}
+            <motion.div layout transition={DOCK_TRANSITION} className="relative flex items-center gap-1">
+              {isProcessing && hasContent && (
+                <button
+                  type="button"
+                  onClick={onStopAgent}
+                  disabled={isCancelling}
+                  className="flex size-8 items-center justify-center rounded-full bg-red-600 text-white shadow-md hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label={isCancelling ? "Cancelando instrucción" : "Detener respuesta del asistente"}
+                  title={isCancelling ? "Cancelando…" : "Detener respuesta del asistente"}
+                >
+                  {isCancelling ? <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : <Square className="size-3.5 fill-current" />}
+                </button>
+              )}
               {hasContent ? (
                 <button
                   type="submit"
-                  disabled={isDisabled}
-                  className="w-10 h-10 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center shadow-md shadow-indigo-600/30 transition cursor-pointer flex-shrink-0 active:scale-95"
-                  aria-label="Enviar instrucción"
-                  title="Enviar instrucción (Enter)"
+                  disabled={isSendDisabled}
+                  className={cn(
+                    "w-10 h-10 rounded-full flex items-center justify-center shadow-md transition cursor-pointer flex-shrink-0 active:scale-95",
+                    !isSendDisabled
+                      ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30"
+                      : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                  )}
+                  aria-label={isProcessing ? "Añadir mensaje a la cola" : "Enviar instrucción"}
+                  title={isInputEmpty ? "Escribe una instrucción para enviar la imagen" : isQueueFull ? "La cola está llena (máx 3)" : (isProcessing ? "Añadir mensaje a la cola (Enter)" : "Enviar instrucción (Enter)")}
                 >
-                  {isProcessing ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <ArrowUp className="w-4 h-4" />
+                </button>
+              ) : isProcessing ? (
+                <button
+                  type="button"
+                  onClick={onStopAgent}
+                  disabled={isCancelling}
+                  className="flex size-10 items-center justify-center rounded-full bg-red-600 text-white shadow-md hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label={isCancelling ? "Cancelando instrucción" : "Detener respuesta del asistente"}
+                  title={isCancelling ? "Cancelando…" : "Detener"}
+                >
+                  {isCancelling ? (
+                    <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
                   ) : (
-                    <ArrowUp className="w-4 h-4" />
+                    <Square className="size-4 fill-current" />
                   )}
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={onAudioStart}
-                  disabled={isDisabled}
+                  disabled={isAudioDisabled}
                   className={cn(
                     "w-10 h-10 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center shadow-md shadow-blue-900/30 transition cursor-pointer flex-shrink-0 active:scale-95",
-                    isDisabled && "opacity-40 cursor-not-allowed"
+                    isAudioDisabled && "opacity-40 cursor-not-allowed"
                   )}
                   aria-label="Comando de voz"
                   title="Comando de voz"

@@ -2,7 +2,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type {
   CreateClassPayload,
   DiagramOperation,
-  DiagramOperationInput,
+  DiagramOperationQueueInput,
 } from "../../domain/entities/diagram-operation.entity";
 import type { DiagramOperationQueueRepository } from "../../domain/repositories/diagram-operation-queue.repository";
 
@@ -65,10 +65,6 @@ export const VALID_OPERATION_KINDS = new Set([
   "RENAME_CLASS",
   "MOVE_CLASS",
   "DELETE_CLASS",
-  "CREATE",
-  "RENAME",
-  "MOVE",
-  "DELETE",
   "CREATE_ATTRIBUTE",
   "UPDATE_ATTRIBUTE",
   "REPOSITION_ATTRIBUTE",
@@ -77,6 +73,8 @@ export const VALID_OPERATION_KINDS = new Set([
   "RENAME_RELATION",
   "DELETE_RELATION",
 ]);
+
+const LEGACY_OPERATION_KINDS = new Set(["CREATE", "RENAME", "MOVE", "DELETE"]);
 
 /**
  * Normaliza operaciones legadas (* -> *_CLASS) y asegura primaryAttribute canónica.
@@ -91,7 +89,7 @@ export function normalizeDiagramOperation(
 
   const op = operation as Record<string, unknown>;
   const kind = typeof op.kind === "string" ? op.kind : "";
-  if (!VALID_OPERATION_KINDS.has(kind)) {
+  if (!VALID_OPERATION_KINDS.has(kind) && !LEGACY_OPERATION_KINDS.has(kind)) {
     throw new Error(`Kind de operación desconocido o no soportado: ${kind}`);
   }
 
@@ -149,7 +147,7 @@ export function normalizeDiagramOperation(
 
 export const diagramOperationQueueRepositoryImpl: DiagramOperationQueueRepository = {
   async enqueue(
-    operation: DiagramOperationInput
+    operation: DiagramOperationQueueInput
   ): Promise<DiagramOperation> {
     const db = await getDb();
     const tx = db.transaction(STORE_NAME, "readwrite");
@@ -165,10 +163,10 @@ export const diagramOperationQueueRepositoryImpl: DiagramOperationQueueRepositor
     }
 
     const nextSequence = highestSequence + 1;
-    const completeOp: DiagramOperation = {
+    const completeOp = normalizeDiagramOperation({
       ...operation,
       sequence: nextSequence,
-    } as DiagramOperation;
+    });
 
     await store.add(completeOp);
     await tx.done;

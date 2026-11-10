@@ -3,64 +3,86 @@
  * TypeScript puro conforme al Principio 1 de la Constitución de Frontend.
  */
 
-export type AgentActivityState =
-  | "IN_PROGRESS"
-  | "FINISHED"
-  | "FAILED"
-  | "CANCELLED";
-
-export interface AgentActivity {
-  id: string;
-  projectId: string;
-  transcription: string | null;
-  resume: string | null;
-  imageUrl: string | null;
-  state: AgentActivityState;
-  createdDate: string;
-}
-
 export type AssistantVisualState =
   | "idle"
   | "options_open"
   | "recording"
   | "thinking";
 
-export type AssistantInputMode = "voice" | "image";
+export type AgentActivityCode =
+  | "preparing_context"
+  | "analyzing_prompt"
+  | "planning"
+  | "analyzing_image"
+  | "reading_diagram"
+  | "reading_classes"
+  | "reading_attributes"
+  | "reading_relations"
+  | "creating_class"
+  | "editing_class"
+  | "deleting_class"
+  | "creating_attribute"
+  | "editing_attribute"
+  | "deleting_attribute"
+  | "creating_relation"
+  | "editing_relation"
+  | "deleting_relation"
+  | "recalling_conversation"
+  | "finalizing";
 
-export interface VoiceCommandInput {
-  projectId: string;
-  audioBlob: Blob;
-  mimeType?: string;
+export type AgentActivityType = "query" | "edit" | "analysis" | "planning";
+
+const activityLabels = {
+  preparing_context: "Preparando el contexto…",
+  analyzing_prompt: "Analizando la solicitud…",
+  planning: "Creando un plan…",
+  analyzing_image: "Analizando la imagen…",
+  reading_diagram: "Consultando el diagrama…",
+  reading_classes: "Consultando clases…",
+  reading_attributes: "Consultando atributos…",
+  reading_relations: "Consultando relaciones…",
+  recalling_conversation: "Recordando conversaciones…",
+  creating_class: "Creando clase…",
+  editing_class: "Editando clase…",
+  deleting_class: "Eliminando clase…",
+  creating_attribute: "Creando atributo…",
+  editing_attribute: "Editando atributo…",
+  deleting_attribute: "Eliminando atributo…",
+  creating_relation: "Creando relación…",
+  editing_relation: "Editando relación…",
+  deleting_relation: "Eliminando relación…",
+  finalizing: "Preparando la respuesta…",
+} satisfies Record<AgentActivityCode, string>;
+
+export function getAgentActivityLabel(code: AgentActivityCode | null | undefined): string {
+  return code ? activityLabels[code] : "Pensando…";
 }
 
-export interface VoiceCommandActionResult {
-  type: string;
-  status: string;
-  summary: string;
-}
-
-export interface VoiceCommandResult {
-  activityId: string;
-  state: AgentActivityState;
-  transcription: string | null;
-  resume: string | null;
-  actionsCount: number;
-  actions: VoiceCommandActionResult[];
-}
-
-export interface ImageCommandInput {
-  projectId: string;
-  imageBlob: Blob;
-  mimeType?: string;
-  prompt?: string;
-}
-
-export interface ImageCommandResult {
-  activityId: string;
-  state: AgentActivityState;
-  transcription: string | null;
-  resume: string | null;
-  imageUrl: string | null;
-  actionsCount: number;
-  actions: VoiceCommandActionResult[];
+export function getAgentActivityType(code: AgentActivityCode | null | undefined): AgentActivityType {
+  switch (code) {
+    case "reading_diagram":
+    case "reading_classes":
+    case "reading_attributes":
+    case "reading_relations":
+    case "recalling_conversation":
+      return "query";
+    case "creating_class":
+    case "editing_class":
+    case "deleting_class":
+    case "creating_attribute":
+    case "editing_attribute":
+    case "deleting_attribute":
+    case "creating_relation":
+    case "editing_relation":
+    case "deleting_relation":
+      return "edit";
+    case "planning":
+      return "planning";
+    case "preparing_context":
+    case "analyzing_prompt":
+    case "analyzing_image":
+    case "finalizing":
+    default:
+      return "analysis";
+  }
 }

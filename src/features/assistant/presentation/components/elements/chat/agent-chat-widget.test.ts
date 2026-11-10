@@ -50,3 +50,7 @@ test("AgentChatWidget integra useInBrowserStt y cancelación de audio", () => {
   assert.match(source, /onCancelVoiceClick/);
   assert.match(source, /stt\.cancelSession\(\)/);
 });
+
+test("AgentChatWidget no aplica animate-pulse para mantener el color sólido todo el tiempo", () => {
+  assert.doesNotMatch(source, /animate-pulse/);
+});

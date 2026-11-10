@@ -5,41 +5,33 @@ import { ArrowUp, Download, ImagePlus, Loader2, Mic, Square, X } from "lucide-re
 import { cn } from "@/lib/utils";
 import type { SttSessionState } from "@/features/assistant/domain/entities/stt-session.entity";
 import type { MultimodalDraftAttachment } from "@/features/assistant/domain/entities/multimodal-draft.entity";
-import { ImageAttachmentBadge } from "./image-attachment-badge";
+import { ComposerImagePreview } from "../composer-image-preview";
 
 export interface AgentChatInputProps {
-  /** Valor de texto actual */
   value: string;
-  /** Callback al cambiar el texto */
   onChange: (value: string) => void;
-  /** Callback al enviar mensaje de texto */
   onSend: (text: string) => void;
-  /** Callback al pulsar el botón dinámico en modo micrófono */
   onAudioClick: () => void;
-  /** Callback al pulsar el botón en modo pausa (detener grabación y transcribir) */
   onPauseClick?: () => void;
-  /** Callback para cancelar y eliminar la grabación de audio en curso */
   onCancelVoiceClick?: () => void;
-  /** Estado reactivo de transcripción por voz */
+  onStopAgent?: () => void;
+  onDiscardEdit?: () => void;
+  isEditingPending?: boolean;
+  hasActiveMessage?: boolean;
+  isCancelling?: boolean;
+  isQueueFull?: boolean;
   sttState?: SttSessionState;
-  /** Callback al pulsar el botón de adjuntar imagen */
   onImageClick: () => void;
-  /** Borrador de imagen adjunta actual */
   draftAttachment?: MultimodalDraftAttachment | null;
-  /** Callback para quitar la imagen adjunta */
   onRemoveAttachment?: () => void;
-  /** Callback para abrir la imagen en visor modal */
   onPreviewAttachment?: (url: string) => void;
-  /** Indica si está deshabilitado por permisos o estado de carga */
   disabled?: boolean;
-  /** Placeholder para el input */
   placeholder?: string;
-  /** Clases CSS adicionales */
   className?: string;
 }
 
-const MIN_TEXTAREA_HEIGHT = 38; // Altura mínima por defecto (1 línea)
-const MAX_TEXTAREA_HEIGHT = 144; // Altura máxima en px antes de activar scroll vertical (~6 líneas)
+const MIN_TEXTAREA_HEIGHT = 38;
+const MAX_TEXTAREA_HEIGHT = 144;
 
 export function AgentChatInput({
   value,
@@ -48,6 +40,10 @@ export function AgentChatInput({
   onAudioClick,
   onPauseClick,
   onCancelVoiceClick,
+  onStopAgent,
+  hasActiveMessage = false,
+  isCancelling = false,
+  isQueueFull = false,
   sttState,
   onImageClick,
   draftAttachment,
@@ -57,214 +53,156 @@ export function AgentChatInput({
   placeholder = "Escribe una instrucción...",
   className,
 }: AgentChatInputProps) {
-  const isInputEmpty = value.trim().length === 0;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const hasContent = value.trim().length > 0 || Boolean(draftAttachment);
+  const hasPrompt = value.trim().length > 0;
+  const sendDisabled = disabled || !hasPrompt || (hasActiveMessage && isQueueFull);
 
-  // Autoajuste dinámico de la altura del textarea con límite máximo y scroll
   useEffect(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
-
-    // Por defecto y cuando no hay texto, siempre debe mantenerse en su altura mínima de 1 línea
     if (!value) {
       textarea.style.height = `${MIN_TEXTAREA_HEIGHT}px`;
       textarea.style.overflowY = "hidden";
       return;
     }
-
-    // Resetear temporalmente la altura para medir el scrollHeight real del texto
     textarea.style.height = "auto";
     const scrollHeight = textarea.scrollHeight;
-
-    if (scrollHeight > MAX_TEXTAREA_HEIGHT) {
-      textarea.style.height = `${MAX_TEXTAREA_HEIGHT}px`;
-      textarea.style.overflowY = "auto";
-    } else {
-      textarea.style.height = `${Math.max(scrollHeight, MIN_TEXTAREA_HEIGHT)}px`;
-      textarea.style.overflowY = "hidden";
-    }
+    textarea.style.height = `${Math.min(Math.max(scrollHeight, MIN_TEXTAREA_HEIGHT), MAX_TEXTAREA_HEIGHT)}px`;
+    textarea.style.overflowY = scrollHeight > MAX_TEXTAREA_HEIGHT ? "auto" : "hidden";
   }, [value]);
 
-  // Listener de tecla Escape durante la grabación para cancelarla inmediatamente
   useEffect(() => {
     if (sttState?.status !== "recording") return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
         onCancelVoiceClick?.();
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [sttState?.status, onCancelVoiceClick]);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onCancelVoiceClick, sttState?.status]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if ((!isInputEmpty || draftAttachment) && !disabled) {
-      onSend(value);
-    }
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!sendDisabled) onSend(value);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if ((!isInputEmpty || draftAttachment) && !disabled) {
-        onSend(value);
-      }
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      if (!sendDisabled) onSend(value);
     }
   };
 
   return (
-    <div className={cn("px-3 pb-3 pt-1 bg-transparent select-none flex-shrink-0", className)}>
-      <form
-        onSubmit={handleSubmit}
-        className="flex flex-col bg-[#282a30] rounded-2xl p-2.5 gap-1.5 transition-colors"
-      >
-        {/* Badge en píldora cuando existe una imagen adjunta */}
+    <div className={cn("flex-shrink-0 bg-transparent px-3 pb-3 pt-1", className)}>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-1.5 rounded-2xl bg-[#282a30] p-2.5 transition-colors">
         {draftAttachment && onRemoveAttachment && onPreviewAttachment && (
-          <div className="pb-1">
-            <ImageAttachmentBadge
+          <div className="flex min-h-16 items-start">
+            <ComposerImagePreview
               attachment={draftAttachment}
               onRemove={onRemoveAttachment}
-              onClickImage={onPreviewAttachment}
+              onPreview={onPreviewAttachment}
               disabled={disabled}
             />
           </div>
         )}
 
-        {/* Fila 1: Textarea de entrada de texto */}
         <textarea
           ref={textareaRef}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
           rows={1}
           style={{ height: MIN_TEXTAREA_HEIGHT }}
-          className="w-full bg-transparent border-0 px-1 py-0.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-0 resize-none max-h-36 overflow-y-hidden select-text [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.2)_transparent] leading-relaxed"
+          className="w-full resize-none border-0 bg-transparent px-1 py-0.5 text-sm leading-relaxed text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-0 max-h-36 overflow-y-hidden select-text [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.2)_transparent]"
           aria-label="Campo de mensaje para el Asistente IA"
         />
 
-        {/* Fila 2: Botones de acción fijados abajo (imagen a la izquierda, audio/enviar a la derecha) */}
         <div className="flex items-center justify-between pt-0.5">
-          {/* Lado izquierdo: Botón de adjuntar imagen (inhabilitado si ya hay una imagen) */}
           <button
             type="button"
             onClick={onImageClick}
             disabled={disabled || Boolean(draftAttachment)}
-            className={cn(
-              "w-8 h-8 rounded-full flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0 cursor-pointer",
-              (disabled || Boolean(draftAttachment)) && "opacity-40 cursor-not-allowed hover:bg-transparent hover:text-zinc-400"
-            )}
+            className={cn("flex size-8 shrink-0 items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-white/10 hover:text-white", (disabled || draftAttachment) && "cursor-not-allowed opacity-40")}
             aria-label="Adjuntar imagen"
             title={draftAttachment ? "Solo se permite una imagen a la vez" : "Adjuntar imagen del diagrama"}
           >
-            <ImagePlus className="w-4 h-4" />
+            <ImagePlus className="size-4" />
           </button>
 
-          {/* Lado derecho: Botón dinámico azul o controles de voz */}
-          {isInputEmpty ? (
-            draftAttachment ? (
-              <button
-                type="submit"
-                disabled={disabled}
-                className="w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 cursor-pointer ml-auto"
-                aria-label="Enviar mensaje"
-                title="Enviar mensaje"
-              >
-                <ArrowUp className="w-4 h-4" />
-              </button>
-            ) : sttState?.status === "downloading" ? (
+          <div className="ml-auto flex items-center gap-2">
+            {hasActiveMessage && hasContent && onStopAgent && (
               <button
                 type="button"
-                disabled
-                className="relative w-8 h-8 rounded-full bg-blue-600/70 text-white flex items-center justify-center transition-colors shadow-md disabled:cursor-not-allowed flex-shrink-0 ml-auto"
-                aria-label={`Descargando modelo: ${sttState.progress}%`}
-                title={`Descargando modelo: ${sttState.progress}%`}
+                onClick={onStopAgent}
+                disabled={disabled || isCancelling}
+                className="flex size-8 items-center justify-center rounded-full bg-red-600 text-white shadow-md transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label={isCancelling ? "Cancelando instrucción" : "Detener respuesta del asistente"}
+                title={isCancelling ? "Cancelando…" : "Detener respuesta del asistente"}
               >
-                <svg className="absolute inset-0 w-full h-full -rotate-90 p-0.5" viewBox="0 0 36 36">
-                  <path
-                    className="text-blue-900/60"
-                    strokeWidth="3.5"
-                    stroke="currentColor"
-                    fill="none"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  />
-                  <path
-                    className="text-blue-200 transition-all duration-200"
-                    strokeDasharray={`${sttState.progress}, 100`}
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                    stroke="currentColor"
-                    fill="none"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  />
-                </svg>
-                <Download className="w-3.5 h-3.5 text-blue-100 z-10" />
+                {isCancelling ? <Loader2 className="size-4 animate-spin" /> : <Square className="size-3.5 fill-current" />}
               </button>
-            ) : sttState?.status === "recording" ? (
-              <div className="flex items-center gap-1.5 ml-auto">
-                {/* Botón X de cancelación a la izquierda */}
-                <button
-                  type="button"
-                  onClick={onCancelVoiceClick}
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-                  aria-label="Cancelar grabación"
-                  title="Cancelar y descartar grabación (Escape)"
-                >
-                  <X className="w-3.5 h-3.5" />
+            )}
+            {sttState?.status === "recording" ? (
+              <div className="flex items-center gap-1.5">
+                <button type="button" onClick={onCancelVoiceClick} className="flex size-7 items-center justify-center rounded-full text-zinc-400 hover:bg-white/10 hover:text-white" aria-label="Cancelar grabación">
+                  <X className="size-3.5" />
                 </button>
-                {/* Botón Square rojo de parada */}
-                <button
-                  type="button"
-                  onClick={onPauseClick ?? onAudioClick}
-                  disabled={disabled}
-                  className="w-8 h-8 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center transition-colors shadow-md flex-shrink-0 cursor-pointer animate-pulse"
-                  aria-label="Finalizar y transcribir"
-                  title="Finalizar y transcribir"
-                >
-                  <Square className="w-3.5 h-3.5 fill-current" />
+                <button type="button" onClick={onPauseClick ?? onAudioClick} className="flex size-8 items-center justify-center rounded-full bg-red-600 text-white shadow-md hover:bg-red-500" aria-label="Finalizar y transcribir">
+                  <Square className="size-3.5 fill-current" />
                 </button>
               </div>
+            ) : sttState?.status === "downloading" ? (
+              <button type="button" disabled className="flex size-8 items-center justify-center rounded-full bg-blue-600/70 text-white" aria-label={`Descargando modelo: ${sttState.progress}%`}>
+                <Download className="size-3.5" />
+              </button>
             ) : sttState?.status === "transcribing" ? (
+              <button type="button" disabled className="flex size-8 items-center justify-center rounded-full bg-blue-600 text-white" aria-label="Transcribiendo audio">
+                <Loader2 className="size-4 animate-spin" />
+              </button>
+            ) : hasContent ? (
+              <button
+                type="submit"
+                disabled={sendDisabled}
+                className="flex size-8 items-center justify-center rounded-full bg-indigo-600 text-white shadow-md transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-500"
+                aria-label={hasActiveMessage ? "Añadir mensaje a la cola" : "Enviar mensaje"}
+                title={!hasPrompt ? "Escribe una instrucción para enviar la imagen" : isQueueFull ? "La cola está llena (máx 3)" : (hasActiveMessage ? "Añadir mensaje a la cola" : "Enviar mensaje")}
+              >
+                <ArrowUp className="size-4" />
+              </button>
+            ) : hasActiveMessage ? (
               <button
                 type="button"
-                disabled
-                className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center transition-colors shadow-md disabled:opacity-80 disabled:cursor-not-allowed flex-shrink-0 ml-auto"
-                aria-label="Transcribiendo audio..."
-                title="Transcribiendo audio..."
+                onClick={onStopAgent}
+                disabled={disabled || isCancelling}
+                className="flex size-8 items-center justify-center rounded-full bg-red-600 text-white shadow-md transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                aria-label={isCancelling ? "Cancelando instrucción" : "Detener respuesta del asistente"}
+                title={isCancelling ? "Cancelando…" : "Detener"}
               >
-                <Loader2 className="w-4 h-4 animate-spin" />
+                {isCancelling ? <Loader2 className="size-4 animate-spin" /> : <Square className="size-3.5 fill-current" />}
               </button>
             ) : (
               <button
                 type="button"
                 onClick={onAudioClick}
-                disabled={disabled}
-                className="w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 cursor-pointer ml-auto"
+                disabled={disabled || isQueueFull}
+                className="flex size-8 items-center justify-center rounded-full bg-blue-600 text-white shadow-md hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Grabar comando de voz"
-                title="Grabar comando de voz"
+                title={isQueueFull ? "La cola está llena" : "Grabar comando de voz"}
               >
-                <Mic className="w-4 h-4" />
+                <Mic className="size-4" />
               </button>
-            )
-          ) : (
-            <button
-              type="submit"
-              disabled={disabled}
-              className="w-8 h-8 rounded-full bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0 cursor-pointer ml-auto"
-              aria-label="Enviar mensaje"
-              title="Enviar mensaje"
-            >
-              <ArrowUp className="w-4 h-4" />
-            </button>
-          )}
+            )}
+          </div>
         </div>
+        {draftAttachment && !hasPrompt && (
+          <span className="sr-only" role="status">Escribe una instrucción para poder enviar la imagen.</span>
+        )}
       </form>
     </div>
   );

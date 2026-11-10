@@ -3,13 +3,10 @@
 import {
   BoxSelect,
   Hand,
-  Image as ImageIcon,
   MousePointer2,
   Network,
   SquarePlus,
-  Type,
 } from "lucide-react";
-import { appToast } from "@/features/shared/presentation/components/notifications/toast";
 import { cn } from "@/lib/utils";
 
 
@@ -129,32 +126,6 @@ export function ProjectCanvasToolbar({
           aria-pressed={isHandActive}
         >
           <Hand className="w-4 h-4" />
-        </button>
-
-        {/* Texto (Próximamente) */}
-        <button
-          type="button"
-          onClick={() =>
-            appToast.info("La herramienta de texto estará disponible próximamente.")
-          }
-          className={getButtonClass(false)}
-          title="Insertar texto (Próximamente)"
-          aria-label="Insertar texto (Próximamente)"
-        >
-          <Type className="w-4 h-4" />
-        </button>
-
-        {/* Imagen (Próximamente) */}
-        <button
-          type="button"
-          onClick={() =>
-            appToast.info("La inserción de imágenes estará disponible próximamente.")
-          }
-          className={getButtonClass(false)}
-          title="Insertar imagen (Próximamente)"
-          aria-label="Insertar imagen (Próximamente)"
-        >
-          <ImageIcon className="w-4 h-4" />
         </button>
       </div>
     </aside>

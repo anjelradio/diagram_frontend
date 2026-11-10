@@ -1,15 +1,24 @@
 import type { ApiResult } from "@/features/shared/domain/types/api-results";
-import type {
-  ImageCommandInput,
-  ImageCommandResult,
-  VoiceCommandInput,
-  VoiceCommandResult,
-} from "../entities/agent-activity.entity";
+import type { AgentMessage, AgentMessagePage } from "../entities/agent-message.entity";
 
-/**
- * Contrato de repositorio para operaciones con el Asistente IA.
- */
+export interface SubmitAgentMessageInput {
+  projectId: string;
+  messageId: string;
+  prompt: string;
+  image?: File | null;
+}
+
+export interface ListAgentMessagesInput {
+  projectId: string;
+  limit?: number;
+  offset?: number;
+  snapshotAt?: string | null;
+}
+
 export interface AssistantRepository {
-  sendVoiceCommand(input: VoiceCommandInput): Promise<ApiResult<VoiceCommandResult>>;
-  sendImageCommand(input: ImageCommandInput): Promise<ApiResult<ImageCommandResult>>;
+  submitMessage(input: SubmitAgentMessageInput): Promise<ApiResult<AgentMessage>>;
+  listMessages(input: ListAgentMessagesInput): Promise<ApiResult<AgentMessagePage>>;
+  getActiveMessage(projectId: string): Promise<ApiResult<AgentMessage | null>>;
+  getMessage(projectId: string, messageId: string): Promise<ApiResult<AgentMessage>>;
+  cancelMessage(projectId: string, messageId: string): Promise<ApiResult<AgentMessage>>;
 }

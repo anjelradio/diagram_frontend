@@ -3,7 +3,8 @@
 import React from "react";
 import { Mic, Send, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { VoiceRecorderBarState } from "../../hooks/use-voice-recorder";
+
+type VoiceRecorderBarState = "idle" | "recording" | "sending";
 
 interface VoiceRecorderBarProps {
   state: VoiceRecorderBarState;

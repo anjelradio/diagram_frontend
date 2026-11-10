@@ -18,10 +18,10 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
-import { diagramOperationQueueRepositoryImpl } from "@/features/diagram/infrastructure/storage/diagram-operation-queue.repository";
 import { sendRealtimeMessage } from "@/features/realtime/infrastructure/websocket/realtime-socket";
 import type { DiagramAttribute } from "@/features/diagram/domain/entities/diagram-attribute.entity";
 import { AttributeRow, type AttributeRowProps } from "./attribute-row";
+import { createRepositionDiagramAttribute } from "@/features/diagram/application/use-cases/reposition-diagram-attribute";
 
 export type AttributeListProps = {
   classId: string;
@@ -80,10 +80,9 @@ export const AttributeList = memo(function AttributeList({
   const projectId = useAppStore((s) => s.projectId);
   const viewerId = useAppStore((s) => s.viewerId);
   const storeCanEdit = useAppStore((s) => s.canEdit);
-  const canEdit = canEditOverride ?? storeCanEdit;
-  const repositionAttributeOptimistic = useAppStore(
-    (s) => s.repositionAttributeOptimistic
-  );
+  const isAgentReserved = useAppStore((s) => s.isComponentReservedByAgent(classId, "class"));
+  const canEdit = (canEditOverride ?? storeCanEdit) && !isAgentReserved;
+  const dispatchDiagramOperation = useAppStore((s) => s.dispatchDiagramOperation);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -110,7 +109,7 @@ export const AttributeList = memo(function AttributeList({
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
-    if (!canEdit) return;
+    if (!canEdit || isAgentReserved) return;
     ensureClassLock();
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -127,28 +126,14 @@ export const AttributeList = memo(function AttributeList({
     const targetPosition = newIndex + 1;
     const movingAttrId = String(active.id);
 
-    // 1. Reordenamiento optimista en el cliente
-    repositionAttributeOptimistic(classId, movingAttrId, targetPosition);
-
-    // 2. Encolar operación durable REPOSITION_ATTRIBUTE en IndexedDB
     if (projectId && viewerId) {
       try {
-        await diagramOperationQueueRepositoryImpl.enqueue({
-          operationId: crypto.randomUUID(),
+        await createRepositionDiagramAttribute({ dispatch: dispatchDiagramOperation })(
           viewerId,
           projectId,
-          kind: "REPOSITION_ATTRIBUTE",
           classId,
-          payload: {
-            attributeId: movingAttrId,
-            position: targetPosition,
-          },
-          createdAt: new Date().toISOString(),
-          attempts: 0,
-          state: "pending",
-        });
-
-        window.dispatchEvent(new CustomEvent("diagram:process-queue"));
+          { attributeId: movingAttrId, position: targetPosition }
+        );
       } catch (err) {
         console.error("Error al encolar reposición de atributo:", err);
       }

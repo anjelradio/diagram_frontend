@@ -9,6 +9,13 @@ export const CODE_GENERATION_MESSAGES = {
   validation: {
     emptyDiagram: "El diagrama no contiene clases para generar el backend.",
     noProject: "No se encontró el proyecto seleccionado.",
+    duplicateClasses: (className: string) => `Hay clases con nombres iguales ('${className}').`,
+    duplicateAttributes: (className: string, attributeName?: string) =>
+      attributeName
+        ? `Hay atributos con nombres iguales en la clase '${className}': '${attributeName}'.`
+        : `Hay atributos con nombres iguales en la clase '${className}'.`,
+    duplicateGeneral:
+      "Hay clases con nombres iguales o hay atributos dentro de clases con nombres iguales.",
   },
   error: {
     defaultTitle: "Error de Generación",

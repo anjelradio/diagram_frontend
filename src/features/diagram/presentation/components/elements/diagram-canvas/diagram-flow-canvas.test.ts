@@ -29,3 +29,29 @@ test("handlePaneClick libera todos los locks del viewerId al hacer clic en el li
   assert.match(source, /state\.classLocks\[classId\]\.userId === viewerId/);
   assert.match(source, /sendRealtimeMessage\(\{ type: "class_lock_release", class_id: classId \}\)/);
 });
+
+test("interactiveNodes deshabilita draggable si el nodo está reservado por el agente", () => {
+  assert.match(source, /const isReserved = Object\.values\(agentReservations\)\.some/);
+  assert.match(source, /!isReserved/);
+});
+
+test("handleNodeDragStart y handleNodeDragStop rechazan mover clases reservadas", () => {
+  assert.match(source, /handleNodeDragStart/);
+  assert.match(source, /isComponentReservedByAgent\(node\.id, "class"\)/);
+  assert.match(source, /handleNodeDragStop/);
+  assert.match(source, /updateClassPositionOptimistic\(node\.id, startPosition\)/);
+});
+
+test("handleConnectStart y handleConnect bloquean conexiones desde o hacia clases reservadas", () => {
+  assert.match(source, /handleConnectStart/);
+  assert.match(source, /El asistente está utilizando esta clase\./);
+  assert.match(source, /handleConnect/);
+  assert.match(source, /No se puede conectar una clase reservada por el asistente\./);
+});
+
+test("handleKeyDown no elimina atributos, relaciones ni clases si están reservadas", () => {
+  assert.match(source, /La clase está reservada por el asistente\./);
+  assert.match(source, /No se puede eliminar una relación reservada por el asistente\./);
+  assert.match(source, /const isReserved = state\.isComponentReservedByAgent\(n\.id, "class"\)/);
+});
+

@@ -3,10 +3,8 @@
 import { memo } from "react";
 import { Plus } from "lucide-react";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
-import { diagramOperationQueueRepositoryImpl } from "@/features/diagram/infrastructure/storage/diagram-operation-queue.repository";
 import { sendRealtimeMessage } from "@/features/realtime/infrastructure/websocket/realtime-socket";
-import type { DiagramAttribute } from "@/features/diagram/domain/entities/diagram-attribute.entity";
-import type { CreateAttributePayload } from "@/features/diagram/domain/entities/diagram-operation.entity";
+import { createCreateDiagramAttribute } from "@/features/diagram/application/use-cases/create-diagram-attribute";
 
 type AddAttributeButtonProps = {
   classId: string;
@@ -29,8 +27,9 @@ export const AddAttributeButton = memo(function AddAttributeButton({
   const projectId = useAppStore((s) => s.projectId);
   const viewerId = useAppStore((s) => s.viewerId);
   const storeCanEdit = useAppStore((s) => s.canEdit);
-  const canEdit = canEditOverride ?? storeCanEdit;
-  const addAttributeOptimistic = useAppStore((s) => s.addAttributeOptimistic);
+  const isAgentReserved = useAppStore((s) => s.isComponentReservedByAgent(classId, "class"));
+  const canEdit = (canEditOverride ?? storeCanEdit) && !isAgentReserved;
+  const dispatchDiagramOperation = useAppStore((s) => s.dispatchDiagramOperation);
   const setSelectedAttribute = useAppStore((s) => s.setSelectedAttribute);
 
   if (!canEdit) return null;
@@ -39,7 +38,7 @@ export const AddAttributeButton = memo(function AddAttributeButton({
     e.stopPropagation();
     e.preventDefault();
 
-    if (!projectId || !viewerId || !canEdit) return;
+    if (!projectId || !viewerId || !canEdit || isAgentReserved) return;
 
     const state = useAppStore.getState();
     if (!state.classLocks[classId] || state.classLocks[classId]?.userId !== viewerId) {
@@ -50,41 +49,14 @@ export const AddAttributeButton = memo(function AddAttributeButton({
     // La PK ocupa la posición 0, los secundarios inician en position >= 1
     const nextPosition = Math.max(currentAttributesCount, 1);
 
-    const newAttribute: DiagramAttribute = {
-      id: newAttributeId,
-      name: "atributo",
-      dataType: null,
-      position: nextPosition,
-      isPrimaryKey: false,
-      isNullable: true,
-    };
-
-    const payload: CreateAttributePayload = {
-      id: newAttributeId,
-      name: "atributo",
-      position: nextPosition,
-    };
-
     try {
-      // 1. Encolar en IndexedDB antes de la mutación optimista
-      await diagramOperationQueueRepositoryImpl.enqueue({
-        operationId: crypto.randomUUID(),
+      await createCreateDiagramAttribute({ dispatch: dispatchDiagramOperation })(
         viewerId,
         projectId,
-        kind: "CREATE_ATTRIBUTE",
         classId,
-        payload,
-        createdAt: new Date().toISOString(),
-        attempts: 0,
-        state: "pending",
-      });
-
-      // 2. Aplicar optimismo en la tarjeta del lienzo
-      addAttributeOptimistic(classId, newAttribute);
+        { id: newAttributeId, name: "atributo", position: nextPosition }
+      );
       setSelectedAttribute({ classId, attributeId: newAttributeId });
-
-      // 3. Disparar proceso de la cola
-      window.dispatchEvent(new CustomEvent("diagram:process-queue"));
 
       onAdded?.(newAttributeId);
     } catch (err) {

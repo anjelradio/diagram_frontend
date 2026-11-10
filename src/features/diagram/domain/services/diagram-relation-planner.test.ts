@@ -212,6 +212,24 @@ describe("DiagramRelationPlanner Service", () => {
       assert.equal(fk.isNullable, false); // sourceCardinality es "1" -> no nullable
     });
 
+    it("trata la notación 1..1 como equivalente a 1 para materialización", () => {
+      const plan = (cardinality: "1" | "1..1") => {
+        idCounter = 1;
+        return planRelationCreation({
+          relationType: "ASSOCIATION",
+          sourceClass: mockClassA,
+          targetClass: mockClassB,
+          sourceHandle: "RIGHT_CENTER",
+          targetHandle: "LEFT_CENTER",
+          sourceCardinality: cardinality,
+          targetCardinality: "0..*",
+          idGenerator: mockIdGen,
+        }).materialization.foreignAttributes[0];
+      };
+
+      assert.deepEqual(plan("1..1"), plan("1"));
+    });
+
     it("planifica Asociación 1:1 colocando FK según cantidad de atributos (desempate en destino)", () => {
       idCounter = 1;
       // mockClassB tiene 2 atributos, mockClassA tiene 1 -> FK va a B

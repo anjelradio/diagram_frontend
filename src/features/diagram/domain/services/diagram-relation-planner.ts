@@ -8,7 +8,6 @@ import type {
   CreateRelationPayload,
   ForeignAttributePayload,
   PrimaryAttributePayload,
-  SharedPrimaryKeyPayload,
 } from "../entities/diagram-operation.entity.ts";
 import {
   isManyToManyRelation,
@@ -39,7 +38,6 @@ export type PlannedRelationAggregate = {
   createRelationPayload: CreateRelationPayload;
   bridgeClass?: DiagramClassWithAttributes;
   foreignKeyAttribute?: DiagramAttribute;
-  sharedPrimaryKeyAttribute?: DiagramAttribute;
 };
 
 /**
@@ -333,78 +331,6 @@ export function planRelationCreation(
       materialization,
       createRelationPayload,
       bridgeClass,
-    };
-  }
-
-  if (strategy === "SHARED_PRIMARY_KEY") {
-    const relationName = resolvedRelationName;
-    const subclassPk = params.sourceClass.attributes.find((a) => a.isPrimaryKey);
-    if (!subclassPk) {
-      throw new Error(
-        `Subclass ${params.sourceClass.name} does not have a primary key for generalization`
-      );
-    }
-
-    const sharedPrimaryKey: SharedPrimaryKeyPayload = {
-      attributeId: subclassPk.id,
-      classId: params.sourceClass.id,
-      referencedClassId: params.targetClass.id,
-      relationId,
-    };
-
-    const materialization: CreateRelationPayload["materialization"] = {
-      strategy: "SHARED_PRIMARY_KEY",
-      foreignAttributes: [],
-      sharedPrimaryKey,
-      bridgeClass: null,
-    };
-
-    const relation: DiagramRelation = {
-      id: relationId,
-      name: relationName,
-      relationType: params.relationType,
-      source: {
-        classId: params.sourceClass.id,
-        handle: params.sourceHandle,
-        cardinality: null,
-      },
-      target: {
-        classId: params.targetClass.id,
-        handle: params.targetHandle,
-        cardinality: null,
-      },
-      bridge: null,
-    };
-
-    const createRelationPayload: CreateRelationPayload = {
-      id: relationId,
-      name: relationName,
-      relationType: params.relationType,
-      source: {
-        classId: params.sourceClass.id,
-        handle: params.sourceHandle,
-        cardinality: null,
-      },
-      target: {
-        classId: params.targetClass.id,
-        handle: params.targetHandle,
-        cardinality: null,
-      },
-      materialization,
-    };
-
-    const sharedPrimaryKeyAttribute: DiagramAttribute = {
-      ...subclassPk,
-      isForeignKey: true,
-      referencedClassId: params.targetClass.id,
-      relationId,
-    };
-
-    return {
-      relation,
-      materialization,
-      createRelationPayload,
-      sharedPrimaryKeyAttribute,
     };
   }
 

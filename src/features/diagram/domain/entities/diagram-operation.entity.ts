@@ -15,10 +15,6 @@ export type DiagramOperationKind =
   | "RENAME_CLASS"
   | "MOVE_CLASS"
   | "DELETE_CLASS"
-  | "CREATE"
-  | "RENAME"
-  | "MOVE"
-  | "DELETE"
   | "CREATE_ATTRIBUTE"
   | "UPDATE_ATTRIBUTE"
   | "REPOSITION_ATTRIBUTE"
@@ -165,25 +161,25 @@ type BaseDiagramOperation = {
 };
 
 export type CreateClassOperation = BaseDiagramOperation & {
-  kind: "CREATE_CLASS" | "CREATE";
+  kind: "CREATE_CLASS";
   classId: string;
   payload: CreateClassPayload;
 };
 
 export type RenameClassOperation = BaseDiagramOperation & {
-  kind: "RENAME_CLASS" | "RENAME";
+  kind: "RENAME_CLASS";
   classId: string;
   payload: RenameClassPayload;
 };
 
 export type MoveClassOperation = BaseDiagramOperation & {
-  kind: "MOVE_CLASS" | "MOVE";
+  kind: "MOVE_CLASS";
   classId: string;
   payload: MoveClassPayload;
 };
 
 export type DeleteClassOperation = BaseDiagramOperation & {
-  kind: "DELETE_CLASS" | "DELETE";
+  kind: "DELETE_CLASS";
   classId: string;
   payload: DeleteClassPayload;
 };
@@ -254,3 +250,21 @@ export type DiagramOperationInput = DistributiveOmit<
   DiagramOperation,
   "sequence"
 >;
+
+/**
+ * Kinds históricos aceptados únicamente en el borde de escritura de la cola.
+ * La cola los persiste siempre en su variante canónica *_CLASS.
+ */
+type LegacyClassOperationInput<T, K extends string> = T extends unknown
+  ? Omit<T, "kind" | "sequence"> & { kind: K }
+  : never;
+
+export type LegacyDiagramOperationInput =
+  | LegacyClassOperationInput<CreateClassOperation, "CREATE">
+  | LegacyClassOperationInput<RenameClassOperation, "RENAME">
+  | LegacyClassOperationInput<MoveClassOperation, "MOVE">
+  | LegacyClassOperationInput<DeleteClassOperation, "DELETE">;
+
+export type DiagramOperationQueueInput =
+  | DiagramOperationInput
+  | LegacyDiagramOperationInput;

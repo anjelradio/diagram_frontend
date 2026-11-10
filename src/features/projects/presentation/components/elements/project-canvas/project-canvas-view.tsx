@@ -20,9 +20,6 @@ import { deriveProjectCanvasCapabilities } from "@/features/projects/domain/serv
 import type { ProjectMember } from "@/features/collaboration/domain/entities/project-member.entity";
 import type { DiagramSnapshot } from "@/features/diagram/domain/entities/diagram-class.entity";
 import {
-  ProjectCanvasBottomControls,
-} from "./project-flow-canvas";
-import {
   ProjectCanvasToolbar,
   type CanvasTool,
 } from "./project-canvas-toolbar";
@@ -41,18 +38,19 @@ import { useDiagramRealtimeBridge } from "@/features/diagram/presentation/hooks/
 import type {
   AssistantVisualState,
 } from "@/features/assistant/domain/entities/agent-activity.entity";
-import type { MultimodalDraftAttachment } from "@/features/assistant/domain/entities/multimodal-draft.entity";
 import { AgentChatWidget } from "@/features/assistant/presentation/components/elements/chat/agent-chat-widget";
 import { AssistantFloatingDock } from "@/features/assistant/presentation/components/elements/dock/assistant-floating-dock";
+import { AgentAuroraOverlay } from "@/features/assistant/presentation/components/elements/agent-aurora-overlay";
 import { useAgentChat } from "@/features/assistant/presentation/hooks/use-agent-chat";
 import { useInBrowserStt } from "@/features/assistant/presentation/hooks/use-in-browser-stt";
-import { assistantRepositoryImpl } from "@/features/assistant/infrastructure/repositories/http-assistant.repository";
+import { appToast } from "@/features/shared/presentation/components/notifications/toast";
 
 type ProjectCanvasViewProps = {
   project: ProjectDetail;
   initialMembers?: ProjectMember[];
   initialSnapshot?: DiagramSnapshot;
   viewerId: string;
+  viewerAvatarUrl?: string | null;
 };
 
 /**
@@ -65,18 +63,18 @@ export function ProjectCanvasView({
   initialMembers = [],
   initialSnapshot,
   viewerId,
+  viewerAvatarUrl = null,
 }: ProjectCanvasViewProps) {
   const [currentProject, setCurrentProject] = useState<ProjectDetail>(project);
   const [isTemporaryHand, setIsTemporaryHand] = useState(false);
 
   const capabilities = deriveProjectCanvasCapabilities(currentProject.accessRole);
-  const isAgentLocked = useAppStore((s) => s.isAgentLocked);
 
   const handleRoleChanged = useCallback((accessRole: "OWNER" | "EDITOR" | "READER") => {
     setCurrentProject((current) => ({ ...current, accessRole }));
   }, []);
 
-  const { refreshSnapshot } = useDiagramRealtimeBridge({
+  useDiagramRealtimeBridge({
     projectId: currentProject.id,
     viewerId,
     role: currentProject.accessRole as "OWNER" | "EDITOR" | "READER",
@@ -84,21 +82,46 @@ export function ProjectCanvasView({
     onRoleChanged: handleRoleChanged,
   });
 
-  const handleAiSuccess = useCallback(() => {
-    void refreshSnapshot();
-  }, [refreshSnapshot]);
-
   // Hook centralizado de conversación y multimodalidad del asistente
-  const chat = useAgentChat();
+  const chat = useAgentChat({ projectId: currentProject.id, currentUserId: viewerId, currentUserAvatarUrl: viewerAvatarUrl });
 
-  // Hook de reconocimiento por voz STT en navegador
-  const stt = useInBrowserStt({
+  // Hook de reconocimiento por voz STT en navegador para el chat lateral (manual)
+  const lateralStt = useInBrowserStt({
     onTranscribeSuccess: (transcribedText) => {
       chat.appendTranscribedText(transcribedText);
     },
   });
 
-  const [isSendingMultimodal, setIsSendingMultimodal] = useState(false);
+  // Callback para auto-enviar mensaje desde el dock flotante al terminar de transcribir voz
+  const handleDockTranscribeSuccess = useCallback(
+    (transcribedText: string) => {
+      const text = transcribedText.trim();
+      const currentInput = chat.inputText.trim();
+      const fullText = [currentInput, text].filter(Boolean).join(" ");
+      const attachment = chat.draftAttachment;
+
+      if (!fullText) {
+        if (attachment) {
+          appToast.error("Escribe una instrucción antes de enviar la imagen.");
+        }
+        return;
+      }
+
+      if (chat.isQueueFull && chat.activeMessage) {
+        appToast.warning("La cola de instrucciones está llena (máx 3).");
+        return;
+      }
+
+      chat.sendMessage(fullText, attachment);
+    },
+    [chat]
+  );
+
+  // Hook de reconocimiento por voz STT en navegador para el dock flotante (auto-envío)
+  const dockStt = useInBrowserStt({
+    onTranscribeSuccess: handleDockTranscribeSuccess,
+  });
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const openFilePicker = useCallback(() => {
@@ -118,38 +141,14 @@ export function ProjectCanvasView({
     [chat]
   );
 
-  const handleSendMessage = useCallback(
-    async (text: string, attachment?: MultimodalDraftAttachment | null) => {
-      const activeAttachment = attachment || chat.draftAttachment;
-      chat.sendMessage(text, activeAttachment);
-
-      if (activeAttachment?.file) {
-        try {
-          setIsSendingMultimodal(true);
-          const result = await assistantRepositoryImpl.sendImageCommand({
-            projectId: currentProject.id,
-            imageBlob: activeAttachment.file,
-            mimeType: activeAttachment.mimeType,
-          });
-          if (result.ok) {
-            handleAiSuccess();
-          }
-        } catch (error) {
-          console.error("Error al despachar imagen al asistente:", error);
-        } finally {
-          setIsSendingMultimodal(false);
-        }
-      }
-    },
-    [chat, currentProject.id, handleAiSuccess]
-  );
-
-  const isAiProcessing = isAgentLocked || isSendingMultimodal;
-  const canEdit = capabilities.canEditDiagram && !isAiProcessing;
+  const isAiProcessing = Boolean(chat.activeMessage && chat.activeMessage.submissionState !== "uncertain" && ["running", "cancelling"].includes(chat.activeMessage.status));
+  const canEdit = capabilities.canEditDiagram;
 
   const assistantVisualState: AssistantVisualState =
     isAiProcessing
       ? "thinking"
+      : lateralStt.state.status === "recording" || dockStt.state.status === "recording"
+      ? "recording"
       : "idle";
 
   // Revalidación reactiva ante cambios de foco/visibilidad y 403/404
@@ -294,7 +293,7 @@ export function ProjectCanvasView({
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [canEdit, capabilities.canExportOrGenerate, exportProject, handleSelectTool]);
+  }, [activeTool, canEdit, capabilities.canExportOrGenerate, exportProject, handleSelectTool]);
 
   return (
     <ReactFlowProvider>
@@ -312,9 +311,9 @@ export function ProjectCanvasView({
       <div className="fixed top-[58px] left-5 z-40 pointer-events-auto">
         <AgentChatWidget
           chat={chat}
-          stt={stt}
+          stt={lateralStt}
           visualState={assistantVisualState}
-          canInteract={capabilities.canEditDiagram && !isAiProcessing}
+          canInteract={capabilities.canEditDiagram}
           onImageSelect={openFilePicker}
         />
 
@@ -328,6 +327,11 @@ export function ProjectCanvasView({
           aria-hidden="true"
         />
       </div>
+
+      <AgentAuroraOverlay
+        isLocked={Boolean(chat.activeMessage && !chat.isActiveUncertain)}
+        isCancelling={chat.activeMessage?.status === "cancelling"}
+      />
 
       {/* Encabezado flotante minimalista */}
       <header className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between py-3 px-5 pointer-events-none">
@@ -479,28 +483,34 @@ export function ProjectCanvasView({
                 <AssistantFloatingDock
                   value={chat.inputText}
                   onChange={chat.setInputText}
-                  onSend={handleSendMessage}
-                  onAudioStart={stt.handleRecordClick}
-                  onAudioStop={stt.handlePauseClick}
-                  onAudioCancel={stt.cancelSession}
+                  onSend={chat.sendMessage}
+                  onAudioStart={dockStt.handleRecordClick}
+                  onAudioStop={dockStt.handlePauseClick}
+                  onAudioCancel={dockStt.cancelSession}
                   onImageAttachClick={openFilePicker}
                   onImageFileSelected={(file) => chat.attachImageFile(file)}
                   draftAttachment={chat.draftAttachment}
                   onRemoveAttachment={chat.removeDraftAttachment}
                   onPreviewAttachment={chat.openModalImage}
-                  sttState={stt.state}
-                  canEdit={canEdit}
-                  isProcessing={isAiProcessing}
+                  sttState={dockStt.state}
+                  canEdit={capabilities.canEditDiagram}
+                  isProcessing={Boolean(chat.activeMessage)}
+                  isCancelling={chat.activeMessage?.status === "cancelling"}
+                  isQueueFull={chat.isQueueFull}
+                  isEditingPending={chat.isEditingPending}
+                  pendingMessages={chat.pendingMessages}
+                  onEditPending={chat.takePendingForEdit}
+                  onRemovePending={chat.removePending}
+                  onDiscardEdit={chat.discardEdit}
+                  onStopAgent={chat.stopActive}
                 />
               </motion.div>
             )}
           </AnimatePresence>
         </div>
 
-        {/* Derecha: Deshacer / Rehacer y Porcentaje de Zoom */}
-        <div className="flex-1 flex justify-end">
-          <ProjectCanvasBottomControls />
-        </div>
+        {/* Derecha: Espacio reservado para balance de 3 columnas */}
+        <div className="flex-1 flex justify-end" />
       </footer>
 
       {/* Diálogo de atajos de teclado (⌘K) */}

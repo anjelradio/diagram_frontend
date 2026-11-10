@@ -30,6 +30,7 @@ describe("realtimeMapper - Mapeo de contrato canónico a dominio", () => {
           expires_at: 1060,
         },
       ],
+      agent_component_reservations: [],
     };
     const domain = realtimeMapper.toDomain(wire);
     assert.equal(domain.type, "presenceSnapshot");
@@ -188,48 +189,162 @@ describe("realtimeMapper - Mapeo de contrato canónico a dominio", () => {
     });
   });
 
-  it("mapea mensaje agent_lock", () => {
-    const wire: RealtimeMessageWire = {
-      type: "agent_lock",
-      user_id: "agent-1",
-      activity_id: "act-456",
-    };
-    const domain = realtimeMapper.toDomain(wire);
-    assert.deepEqual(domain, {
-      type: "agentLock",
-      userId: "agent-1",
-      activityId: "act-456",
-    });
-  });
-
-  it("mapea mensaje agent_finished", () => {
-    const wire: RealtimeMessageWire = {
-      type: "agent_finished",
-      user_id: "agent-1",
-      activity_id: "act-456",
-      state: "FINISHED",
-    };
-    const domain = realtimeMapper.toDomain(wire);
-    assert.deepEqual(domain, {
-      type: "agentFinished",
-      userId: "agent-1",
-      activityId: "act-456",
-      state: "FINISHED",
-    });
-  });
-
-  it("mapea el lock activo incluido en presence_snapshot", () => {
+  it("mapea la proyección terminal del mensaje del agente", () => {
     const domain = realtimeMapper.toDomain({
+      type: "agent_message_finished",
+      project_id: "00000000-0000-4000-8000-000000000001",
+      message_id: "00000000-0000-4000-8000-000000000002",
+      user_id: "user-1",
+      author_name: "Ada",
+      author_avatar_url: null,
+      prompt: "Crea una clase",
+      image_url: null,
+      created_at: "2026-11-04T12:00:00Z",
+      status: "completed",
+      response_markdown: "Clase creada.",
+    });
+    assert.equal(domain.type, "agentMessageFinished");
+    if (domain.type !== "agentMessageFinished") return;
+    assert.equal(domain.message.id, "00000000-0000-4000-8000-000000000002");
+    assert.equal(domain.message.projectId, "00000000-0000-4000-8000-000000000001");
+    assert.equal(domain.message.responseMarkdown, "Clase creada.");
+    assert.equal(domain.message.status, "completed");
+    assert.equal(domain.message.authorAvatarUrl, null);
+  });
+
+  it("mapea aceptación compartida y mantiene autor e imagen", () => {
+    const domain = realtimeMapper.toDomain({
+      type: "agent_message_accepted",
+      project_id: "00000000-0000-4000-8000-000000000001",
+      message_id: "00000000-0000-4000-8000-000000000002",
+      user_id: "user-1",
+      author_name: "Ada",
+      author_avatar_url: null,
+      prompt: "Crea una clase",
+      image_url: "https://example.test/erd.png",
+      created_at: "2026-11-04T12:00:00Z",
+      status: "running",
+      cancel_requested: false,
+      response_markdown: null,
+    });
+    assert.equal(domain.type, "agentMessageAccepted");
+    if (domain.type !== "agentMessageAccepted") return;
+    assert.equal(domain.message.id, "00000000-0000-4000-8000-000000000002");
+    assert.equal(domain.message.authorName, "Ada");
+    assert.equal(domain.message.authorAvatarUrl, null);
+    assert.equal(domain.message.imageUrl, "https://example.test/erd.png");
+    assert.equal(domain.message.status, "running");
+  });
+
+  it("mapea actividad efímera con correlación, secuencia y código allowlist", () => {
+    const domain = realtimeMapper.toDomain({
+      type: "agent_message_activity",
+      project_id: "00000000-0000-4000-8000-000000000001",
+      message_id: "00000000-0000-4000-8000-000000000002",
+      attempt_id: "00000000-0000-4000-8000-000000000003",
+      sequence: 5,
+      activity_code: "reading_classes",
+      occurred_at: "2026-11-05T12:00:00Z",
+    });
+    assert.deepEqual(domain, {
+      type: "agentMessageActivity",
+      projectId: "00000000-0000-4000-8000-000000000001",
+      messageId: "00000000-0000-4000-8000-000000000002",
+      attemptId: "00000000-0000-4000-8000-000000000003",
+      sequence: 5,
+      activityCode: "reading_classes",
+      activityType: "query",
+      occurredAt: "2026-11-05T12:00:00Z",
+    });
+
+    const explicit = realtimeMapper.toDomain({
+      type: "agent_message_activity",
+      project_id: "00000000-0000-4000-8000-000000000001",
+      message_id: "00000000-0000-4000-8000-000000000002",
+      attempt_id: "00000000-0000-4000-8000-000000000003",
+      sequence: 6,
+      activity_code: "planning",
+      activity_type: "planning",
+      occurred_at: "2026-11-05T12:00:01Z",
+    });
+    const recalling = realtimeMapper.toDomain({
+      type: "agent_message_activity",
+      project_id: "00000000-0000-4000-8000-000000000001",
+      message_id: "00000000-0000-4000-8000-000000000002",
+      attempt_id: "00000000-0000-4000-8000-000000000003",
+      sequence: 7,
+      activity_code: "recalling_conversation",
+      occurred_at: "2026-11-05T12:00:02Z",
+    });
+    assert.deepEqual(recalling, {
+      type: "agentMessageActivity",
+      projectId: "00000000-0000-4000-8000-000000000001",
+      messageId: "00000000-0000-4000-8000-000000000002",
+      attemptId: "00000000-0000-4000-8000-000000000003",
+      sequence: 7,
+      activityCode: "recalling_conversation",
+      activityType: "query",
+      occurredAt: "2026-11-05T12:00:02Z",
+    });
+  });
+
+  it("mapea mensaje agent_component_reserved y presence_snapshot con reservas", () => {
+    const domain = realtimeMapper.toDomain({
+      type: "agent_component_reserved",
+      project_id: "00000000-0000-4000-8000-000000000001",
+      message_id: "00000000-0000-4000-8000-000000000002",
+      sequence: 3,
+      component_type: "class",
+      component_id: "00000000-0000-4000-8000-000000000004",
+      activity_type: "edit",
+      attribute_id: "00000000-0000-4000-8000-000000000005",
+    });
+    assert.deepEqual(domain, {
+      type: "agentComponentReserved",
+      reservation: {
+        projectId: "00000000-0000-4000-8000-000000000001",
+        messageId: "00000000-0000-4000-8000-000000000002",
+        sequence: 3,
+        componentType: "class",
+        componentId: "00000000-0000-4000-8000-000000000004",
+        activityType: "edit",
+        attributeId: "00000000-0000-4000-8000-000000000005",
+      },
+    });
+
+    const released = realtimeMapper.toDomain({
+      type: "agent_component_reservations_released",
+      project_id: "00000000-0000-4000-8000-000000000001",
+      message_id: "00000000-0000-4000-8000-000000000002",
+    });
+    assert.deepEqual(released, {
+      type: "agentComponentReservationsReleased",
+      projectId: "00000000-0000-4000-8000-000000000001",
+      messageId: "00000000-0000-4000-8000-000000000002",
+    });
+
+    const snapshot = realtimeMapper.toDomain({
       type: "presence_snapshot",
       peers: [],
       class_locks: [],
-      agent_lock: { user_id: "agent-1", activity_id: "act-1" },
+      agent_component_reservations: [
+        {
+          project_id: "00000000-0000-4000-8000-000000000001",
+          message_id: "00000000-0000-4000-8000-000000000002",
+          sequence: 1,
+          component_type: "relation",
+          component_id: "00000000-0000-4000-8000-000000000006",
+          activity_type: "query",
+          attribute_id: null,
+        },
+      ],
     });
-    assert.deepEqual(domain, {
-      type: "presenceSnapshot",
-      peers: [],
-      classLocks: [],
-      agentLock: { userId: "agent-1", activityId: "act-1" },
-    });
+    if (snapshot.type === "presenceSnapshot") {
+      assert.equal(snapshot.agentComponentReservations?.length, 1);
+      assert.equal(
+        snapshot.agentComponentReservations[0].componentId,
+        "00000000-0000-4000-8000-000000000006"
+      );
+    }
   });
 });

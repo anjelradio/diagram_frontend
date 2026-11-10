@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -9,13 +9,13 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
-import { diagramOperationQueueRepositoryImpl } from "@/features/diagram/infrastructure/storage/diagram-operation-queue.repository";
 import { sendRealtimeMessage } from "@/features/realtime/infrastructure/websocket/realtime-socket";
 import type {
   DiagramAttribute,
   DiagramAttributeDataType,
 } from "@/features/diagram/domain/entities/diagram-attribute.entity";
 import type { UpdateAttributePayload } from "@/features/diagram/domain/entities/diagram-operation.entity";
+import { createUpdateDiagramAttribute } from "@/features/diagram/application/use-cases/update-diagram-attribute";
 
 type AttributeTypePopoverProps = {
   classId: string;
@@ -54,10 +54,15 @@ export const AttributeTypePopover = memo(function AttributeTypePopover({
   const storeCanEdit = useAppStore((s) => s.canEdit);
   const classLock = useAppStore((s) => s.classLocks[classId]);
   const isLockedByOther = Boolean(classLock && classLock.userId !== viewerId);
-  const canEdit = (canEditProp ?? storeCanEdit) && !isLockedByOther;
-  const updateAttributeOptimistic = useAppStore(
-    (s) => s.updateAttributeOptimistic
-  );
+  const isAgentReserved = useAppStore((s) => s.isComponentReservedByAgent(classId, "class"));
+  const canEdit = (canEditProp ?? storeCanEdit) && !isLockedByOther && !isAgentReserved;
+  const dispatchDiagramOperation = useAppStore((s) => s.dispatchDiagramOperation);
+
+  useEffect(() => {
+    if (isAgentReserved && open) {
+      setOpen(false);
+    }
+  }, [isAgentReserved, open]);
 
   const ensureClassLock = () => {
     if (!canEdit) return;
@@ -113,14 +118,8 @@ export const AttributeTypePopover = memo(function AttributeTypePopover({
   }
 
   const dispatchUpdate = async (patch: Partial<UpdateAttributePayload>) => {
+    if (!canEdit || isAgentReserved) return;
     ensureClassLock();
-    // 1. Actualización optimista en el estado de React
-    updateAttributeOptimistic(classId, attribute.id, {
-      dataType: patch.dataType !== undefined ? patch.dataType : attribute.dataType,
-      isNullable: patch.isNullable !== undefined ? patch.isNullable : attribute.isNullable,
-    });
-
-    // 2. Encolar operación durable UPDATE_ATTRIBUTE en IndexedDB
     if (projectId && viewerId) {
       try {
         const payload: UpdateAttributePayload = {
@@ -128,19 +127,12 @@ export const AttributeTypePopover = memo(function AttributeTypePopover({
           ...patch,
         };
 
-        await diagramOperationQueueRepositoryImpl.enqueue({
-          operationId: crypto.randomUUID(),
+        await createUpdateDiagramAttribute({ dispatch: dispatchDiagramOperation })(
           viewerId,
           projectId,
-          kind: "UPDATE_ATTRIBUTE",
           classId,
-          payload,
-          createdAt: new Date().toISOString(),
-          attempts: 0,
-          state: "pending",
-        });
-
-        window.dispatchEvent(new CustomEvent("diagram:process-queue"));
+          payload
+        );
       } catch (err) {
         console.error("Error al encolar actualización de atributo:", err);
       }

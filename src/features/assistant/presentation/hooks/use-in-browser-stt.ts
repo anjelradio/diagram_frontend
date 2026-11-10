@@ -24,6 +24,11 @@ export function useInBrowserStt({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const onTranscribeSuccessRef = useRef(onTranscribeSuccess);
+
+  useEffect(() => {
+    onTranscribeSuccessRef.current = onTranscribeSuccess;
+  }, [onTranscribeSuccess]);
 
   const isSupported =
     typeof window !== "undefined" &&
@@ -165,7 +170,7 @@ export function useInBrowserStt({
           });
 
           if (result.text) {
-            onTranscribeSuccess(result.text);
+            onTranscribeSuccessRef.current(result.text);
           }
           setState({ status: "idle" });
         } catch (err) {
@@ -187,7 +192,7 @@ export function useInBrowserStt({
         resolve();
       }
     });
-  }, [cleanupStream, language, modelId, onTranscribeSuccess]);
+  }, [cleanupStream, language, modelId]);
 
   return {
     state,

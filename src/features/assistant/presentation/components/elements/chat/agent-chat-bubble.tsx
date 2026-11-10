@@ -3,6 +3,21 @@
 import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/features/assistant/domain/entities/chat-message.entity";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/components/ui/avatar";
+import {
+  Bubble,
+  BubbleContent,
+} from "@/components/ui/bubble";
+import {
+  Message,
+  MessageAvatar,
+  MessageContent,
+  MessageFooter,
+} from "@/components/ui/message";
 
 export interface AgentChatBubbleProps {
   /** Mensaje a representar */
@@ -28,14 +43,28 @@ export function AgentChatBubble({
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
-    const el = contentRef.current;
-    if (!el) return;
+    const content = message.content || "";
+    const lineCount = (content.match(/\n/g) || []).length + 1;
 
-    if (el.scrollHeight > COLLAPSED_MAX_HEIGHT + 8) {
-      setIsOverflowing(true);
-    } else {
-      setIsOverflowing(false);
-    }
+    const checkOverflow = () => {
+      // Si el texto es corto (<= 120 caracteres) y tiene 4 renglones o menos, jamás debe desbordar
+      if (content.length <= 120 && lineCount <= 4) {
+        setIsOverflowing(false);
+        setIsExpanded(false);
+        return;
+      }
+
+      const el = contentRef.current;
+      if (!el) return;
+      const computedLineHeight = parseFloat(window.getComputedStyle(el).lineHeight) || 22;
+      const estimatedLines = Math.round(el.scrollHeight / computedLineHeight);
+      const isActuallyOverflowing =
+        el.scrollHeight > COLLAPSED_MAX_HEIGHT + 8 && (estimatedLines > 4 || lineCount > 4);
+      setIsOverflowing(isActuallyOverflowing);
+    };
+
+    const rafId = requestAnimationFrame(checkOverflow);
+    return () => cancelAnimationFrame(rafId);
   }, [message.content]);
 
   const senderName = isCurrentUser ? "Tú" : message.sender.name || "Colaborador";
@@ -49,56 +78,47 @@ export function AgentChatBubble({
         .toUpperCase();
 
   return (
-    <div
-      className={cn(
-        "group relative flex flex-col my-1 max-w-full",
-        isCurrentUser ? "items-end" : "items-start",
-        className
-      )}
+    <Message
+      align={isCurrentUser ? "end" : "start"}
+      className={cn("group my-1", className)}
     >
-      {/* Etiqueta superior con nombre o 'Tú' */}
-      <span
-        className={cn(
-          "text-[11px] font-medium mb-1 px-1",
-          isCurrentUser ? "text-blue-300 text-right" : "text-zinc-400 text-left"
-        )}
-      >
-        {senderName}
-      </span>
-
-      {/* Contenedor de burbuja + avatar */}
-      <div
-        className={cn(
-          "flex items-end gap-2 max-w-full",
-          isCurrentUser ? "flex-row" : "flex-row"
-        )}
-      >
-        {/* Avatar del colaborador a la izquierda */}
-        {!isCurrentUser && (
-          <div
-            className="w-7 h-7 rounded-full bg-zinc-700 border border-zinc-600 flex items-center justify-center text-[10px] font-semibold text-zinc-200 flex-shrink-0 select-none overflow-hidden"
-            title={message.sender.name}
-          >
-            {message.sender.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={message.sender.avatarUrl}
-                alt={message.sender.name}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              initials
-            )}
-          </div>
-        )}
-
-        {/* Burbuja del mensaje */}
-        <div
+      {/* Avatar del usuario o colaborador anclado siempre arriba a la derecha (si es usuario) o izquierda */}
+      <MessageAvatar>
+        <Avatar
           className={cn(
-            "relative px-3.5 py-2 text-sm shadow-sm break-words max-w-[82%] leading-relaxed transition-all duration-200",
+            "size-7 border select-none overflow-hidden",
             isCurrentUser
-              ? "bg-blue-600 text-white rounded-2xl rounded-tr-sm"
-              : "bg-zinc-800 text-zinc-100 border border-white/10 rounded-2xl rounded-tl-sm"
+              ? "bg-blue-700 border-blue-400/40 text-white"
+              : "bg-zinc-700 border-zinc-600 text-zinc-200"
+          )}
+          title={senderName}
+        >
+          {message.sender.avatarUrl ? (
+            <AvatarImage
+              src={message.sender.avatarUrl}
+              alt={senderName}
+            />
+          ) : null}
+          <AvatarFallback>{initials}</AvatarFallback>
+        </Avatar>
+      </MessageAvatar>
+
+      {/* Contenedor del mensaje */}
+      <MessageContent>
+        {/* Etiqueta superior con nombre para colaboradores */}
+        {!isCurrentUser && (
+          <span className="text-[11px] font-medium mb-0.5 px-1 text-zinc-400 text-left">
+            {senderName}
+          </span>
+        )}
+
+        {/* Burbuja del mensaje redonda y uniforme */}
+        <Bubble
+          variant={isCurrentUser ? "default" : "muted"}
+          className={cn(
+            isCurrentUser
+              ? "bg-blue-600 text-white"
+              : "bg-zinc-800 text-zinc-100"
           )}
         >
           {/* Imágenes adjuntas del mensaje */}
@@ -129,8 +149,8 @@ export function AgentChatBubble({
             </div>
           )}
 
-          {/* Contenedor del contenido textual con clamp de altura si excede el límite y está colapsado */}
-          <div
+          {/* Contenido textual con clamp de altura */}
+          <BubbleContent
             ref={contentRef}
             className={cn(
               "whitespace-pre-wrap transition-[max-height] duration-200",
@@ -142,7 +162,13 @@ export function AgentChatBubble({
             }}
           >
             {message.content}
-          </div>
+          </BubbleContent>
+
+          {message.status === "uncertain" && (
+            <p className="mt-2 px-1 text-[11px] text-amber-200" role="status">
+              No pude confirmar el estado. No se reenviará automáticamente.
+            </p>
+          )}
 
           {/* Degradado y botón 'Ver más' cuando el contenido supera el límite y está colapsado */}
           {isOverflowing && !isExpanded && (
@@ -188,38 +214,16 @@ export function AgentChatBubble({
               </button>
             </div>
           )}
-        </div>
+        </Bubble>
 
-        {/* Avatar del usuario propio a la derecha */}
-        {isCurrentUser && (
-          <div
-            className="w-7 h-7 rounded-full bg-blue-700 border border-blue-400/40 flex items-center justify-center text-[10px] font-semibold text-white flex-shrink-0 select-none overflow-hidden"
-            title="Tú"
-          >
-            {message.sender.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={message.sender.avatarUrl}
-                alt="Tú"
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              "TÚ"
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Fecha/hora simple visible únicamente al hacer hover */}
-      <div
-        suppressHydrationWarning
-        className={cn(
-          "opacity-0 group-hover:opacity-100 transition-opacity duration-150 text-[10px] text-zinc-400 mt-1 px-1",
-          isCurrentUser ? "text-right" : "text-left"
-        )}
-      >
-        {message.formattedTime}
-      </div>
-    </div>
+        {/* Fecha/hora simple visible únicamente al hacer hover */}
+        <MessageFooter
+          suppressHydrationWarning
+          className="opacity-0 group-hover:opacity-100 transition-opacity duration-150 px-1"
+        >
+          {message.formattedTime}
+        </MessageFooter>
+      </MessageContent>
+    </Message>
   );
 }

@@ -121,31 +121,109 @@ describe("RealtimeMessageSchema - Validación de contrato canónico", () => {
     assert.equal(parsed.success, true);
   });
 
-  it("valida mensaje agent_lock", () => {
+  it("valida proyección terminal persistida del chat del agente", () => {
     const parsed = RealtimeMessageSchema.safeParse({
-      type: "agent_lock",
-      user_id: "agent-1",
-      activity_id: "act-123",
+      type: "agent_message_finished",
+      project_id: "00000000-0000-4000-8000-000000000001",
+      message_id: "00000000-0000-4000-8000-000000000002",
+      user_id: "user-1",
+      author_name: "Ada",
+      author_avatar_url: "https://cdn.example.test/ada.png",
+      prompt: "Crea una clase",
+      image_url: null,
+      created_at: "2026-11-04T12:00:00Z",
+      status: "completed",
+      response_markdown: "Clase creada.",
     });
     assert.equal(parsed.success, true);
   });
 
-  it("valida mensaje agent_finished", () => {
-    const parsed = RealtimeMessageSchema.safeParse({
-      type: "agent_finished",
-      user_id: "agent-1",
-      activity_id: "act-123",
-      state: "FINISHED",
-    });
-    assert.equal(parsed.success, true);
+  it("valida aceptación persistida con avatar nullable", () => {
+    const base = {
+      type: "agent_message_accepted",
+      project_id: "00000000-0000-4000-8000-000000000001",
+      message_id: "00000000-0000-4000-8000-000000000002",
+      user_id: "user-1",
+      author_name: "Ada",
+      prompt: "Crea una clase",
+      image_url: null,
+      created_at: "2026-11-04T12:00:00Z",
+      status: "running",
+    };
+    assert.equal(RealtimeMessageSchema.safeParse(base).success, true);
+    const parsed = RealtimeMessageSchema.parse(base);
+    assert.equal(parsed.type, "agent_message_accepted");
+    assert.equal(
+      RealtimeMessageSchema.safeParse({ ...base, author_avatar_url: null }).success,
+      true
+    );
+    assert.equal(RealtimeMessageSchema.safeParse({ ...base, status: "completed" }).success, false);
   });
 
-  it("valida el lock activo opcional de presence_snapshot", () => {
+  it("valida eventos de actividad tipados y rechaza códigos desconocidos", () => {
+    const event = {
+      type: "agent_message_activity",
+      project_id: "00000000-0000-4000-8000-000000000001",
+      message_id: "00000000-0000-4000-8000-000000000002",
+      attempt_id: "00000000-0000-4000-8000-000000000003",
+      sequence: 1,
+      activity_code: "planning",
+      activity_type: "planning",
+      occurred_at: "2026-11-05T12:00:00Z",
+    };
+    assert.equal(RealtimeMessageSchema.safeParse(event).success, true);
+    assert.equal(
+      RealtimeMessageSchema.safeParse({
+        ...event,
+        activity_code: "recalling_conversation",
+        activity_type: "query",
+      }).success,
+      true
+    );
+    assert.equal(
+      RealtimeMessageSchema.safeParse({ ...event, activity_type: "query" }).success,
+      true
+    );
+    assert.equal(
+      RealtimeMessageSchema.safeParse({ ...event, activity_type: "unknown_type" }).success,
+      false
+    );
+    assert.equal(
+      RealtimeMessageSchema.safeParse({ ...event, activity_code: "private_reasoning" }).success,
+      false
+    );
+  });
+
+  it("valida mensaje agent_component_reserved con y sin attribute_id", () => {
+    const parsedWithAttr = RealtimeMessageSchema.safeParse({
+      type: "agent_component_reserved",
+      project_id: "11111111-1111-4111-8111-111111111111",
+      message_id: "22222222-2222-4222-8222-222222222222",
+      sequence: 1,
+      component_type: "class",
+      component_id: "33333333-3333-4333-8333-333333333333",
+      activity_type: "edit",
+      attribute_id: "44444444-4444-4444-8444-444444444444",
+    });
+    assert.equal(parsedWithAttr.success, true);
+
+    const parsedWithoutAttr = RealtimeMessageSchema.safeParse({
+      type: "agent_component_reserved",
+      project_id: "11111111-1111-4111-8111-111111111111",
+      message_id: "22222222-2222-4222-8222-222222222222",
+      sequence: 2,
+      component_type: "relation",
+      component_id: "55555555-5555-4555-8555-555555555555",
+      activity_type: "query",
+    });
+    assert.equal(parsedWithoutAttr.success, true);
+  });
+
+  it("valida mensaje agent_component_reservations_released", () => {
     const parsed = RealtimeMessageSchema.safeParse({
-      type: "presence_snapshot",
-      peers: [],
-      class_locks: [],
-      agent_lock: { user_id: "agent-1", activity_id: "act-1" },
+      type: "agent_component_reservations_released",
+      project_id: "11111111-1111-4111-8111-111111111111",
+      message_id: "22222222-2222-4222-8222-222222222222",
     });
     assert.equal(parsed.success, true);
   });

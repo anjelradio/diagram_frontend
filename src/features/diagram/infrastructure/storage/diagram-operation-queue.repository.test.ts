@@ -49,6 +49,39 @@ describe("DiagramOperationQueueRepository - Normalización, Migración Durable y
     assert.ok(typeof payload.primaryAttribute.id === "string");
   });
 
+  it("preserva el payload de PK ya generado por el cliente al normalizar una cola antigua", () => {
+    const primaryAttribute = {
+      id: "client-pk-id",
+      name: "id" as const,
+      dataType: "UUID" as const,
+      position: 0 as const,
+      isPrimaryKey: true as const,
+      isNullable: false as const,
+    };
+    const legacyOp = {
+      operationId: "op-create-with-pk",
+      viewerId: "user-1",
+      projectId: "proj-1",
+      sequence: 4,
+      kind: "CREATE",
+      classId: "class-1",
+      payload: {
+        id: "class-1",
+        name: "Order",
+        positionX: 40,
+        positionY: 70,
+        primaryAttribute,
+      },
+      createdAt: "2026-09-13T10:00:00.000Z",
+      attempts: 0,
+      state: "pending",
+    };
+
+    const normalized = normalizeDiagramOperation(legacyOp);
+    assert.equal(normalized.kind, "CREATE_CLASS");
+    assert.deepEqual(normalized.payload.primaryAttribute, primaryAttribute);
+  });
+
   it("migra RENAME a RENAME_CLASS conservando identidad, secuencia y reintentos", () => {
     const legacyRename = {
       operationId: "op-rename-legacy",

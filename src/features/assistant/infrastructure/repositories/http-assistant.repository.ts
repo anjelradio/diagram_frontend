@@ -1,21 +1,23 @@
 import type { ApiResult } from "@/features/shared/domain/types/api-results";
 import {
+  apiRequestData,
   apiRequestFormData,
 } from "@/features/shared/infrastructure/http/api-client";
+import type { AgentMessage, AgentMessagePage } from "../../domain/entities/agent-message.entity";
 import type {
-  ImageCommandInput,
-  ImageCommandResult,
-  VoiceCommandInput,
-  VoiceCommandResult,
-} from "../../domain/entities/agent-activity.entity";
-import type { AssistantRepository } from "../../domain/repositories/assistant.repository";
+  ListAgentMessagesInput,
+  SubmitAgentMessageInput,
+  AssistantRepository,
+} from "../../domain/repositories/assistant.repository";
 import {
-  mapImageCommandResultToEntity,
-  mapVoiceCommandResultToEntity,
+  mapActiveAgentMessageToEntity,
+  mapAgentMessagePageToEntity,
+  mapAgentMessageToEntity,
 } from "../mappers/assistant.mapper";
 import {
-  imageCommandResultWireSchema,
-  voiceCommandResultWireSchema,
+  agentMessageActiveWireSchema,
+  agentMessagePageWireSchema,
+  agentMessageWireSchema,
 } from "../schemas/assistant.schemas";
 
 const rawBackendUrl =
@@ -24,75 +26,78 @@ const apiBaseUrl = rawBackendUrl.endsWith("/api")
   ? rawBackendUrl
   : `${rawBackendUrl}/api`;
 
-const ASSISTANT_URL = `${apiBaseUrl}/assistant`;
+function messagesUrl(projectId: string): string {
+  return `${apiBaseUrl}/projects/${encodeURIComponent(projectId)}/assistant/messages`;
+}
 
 export function createAssistantRepository(): AssistantRepository {
   return {
-
-    async sendVoiceCommand(
-      input: VoiceCommandInput
-    ): Promise<ApiResult<VoiceCommandResult>> {
+    async submitMessage(input: SubmitAgentMessageInput): Promise<ApiResult<AgentMessage>> {
       const formData = new FormData();
-      formData.append("project_id", input.projectId);
-
-      const mimeType = input.mimeType || "audio/webm";
-      const extension = mimeType.includes("wav")
-        ? "wav"
-        : mimeType.includes("mp3")
-        ? "mp3"
-        : "webm";
-      const filename = `command.${extension}`;
-
-      const audioFile = new File([input.audioBlob], filename, {
-        type: mimeType,
-      });
-      formData.append("audio", audioFile);
+      formData.append("message_id", input.messageId);
+      formData.append("prompt", input.prompt);
+      if (input.image) formData.append("image", input.image, input.image.name || "diagram.png");
 
       return apiRequestFormData({
-        url: `${ASSISTANT_URL}/voice`,
+        url: messagesUrl(input.projectId),
         method: "POST",
         withAuth: true,
         body: formData,
-        fallbackMessage: "No se pudo procesar la orden de voz.",
-        responseSchema: voiceCommandResultWireSchema,
-        mapData: mapVoiceCommandResultToEntity,
+        fallbackMessage: "No se pudo enviar el mensaje al asistente.",
+        responseSchema: agentMessageWireSchema,
+        mapData: mapAgentMessageToEntity,
       });
     },
 
-    async sendImageCommand(
-      input: ImageCommandInput
-    ): Promise<ApiResult<ImageCommandResult>> {
-      const formData = new FormData();
-      formData.append("project_id", input.projectId);
-      if (input.prompt) {
-        formData.append("prompt", input.prompt);
-      }
-
-      const mimeType = input.mimeType || "image/png";
-      const extension = mimeType.includes("webp")
-        ? "webp"
-        : mimeType.includes("jpeg") || mimeType.includes("jpg")
-        ? "jpg"
-        : "png";
-      const filename = `diagram.${extension}`;
-
-      const imageFile = new File([input.imageBlob], filename, {
-        type: mimeType,
+    async listMessages(input: ListAgentMessagesInput): Promise<ApiResult<AgentMessagePage>> {
+      const query = new URLSearchParams({
+        limit: String(input.limit ?? 6),
+        offset: String(input.offset ?? 0),
       });
-      formData.append("image", imageFile);
+      if (input.snapshotAt) query.set("snapshot_at", input.snapshotAt);
+      return apiRequestData({
+        url: `${messagesUrl(input.projectId)}?${query.toString()}`,
+        method: "GET",
+        withAuth: true,
+        fallbackMessage: "No se pudo cargar el historial del asistente.",
+        responseSchema: agentMessagePageWireSchema,
+        mapData: mapAgentMessagePageToEntity,
+      });
+    },
 
-      return apiRequestFormData({
-        url: `${ASSISTANT_URL}/image`,
+    async getActiveMessage(projectId: string): Promise<ApiResult<AgentMessage | null>> {
+      return apiRequestData({
+        url: `${messagesUrl(projectId)}/active`,
+        method: "GET",
+        withAuth: true,
+        fallbackMessage: "No se pudo recuperar la ejecución activa.",
+        responseSchema: agentMessageActiveWireSchema,
+        mapData: mapActiveAgentMessageToEntity,
+      });
+    },
+
+    async getMessage(projectId: string, messageId: string): Promise<ApiResult<AgentMessage>> {
+      return apiRequestData({
+        url: `${messagesUrl(projectId)}/${encodeURIComponent(messageId)}`,
+        method: "GET",
+        withAuth: true,
+        fallbackMessage: "No se pudo reconciliar el mensaje del asistente.",
+        responseSchema: agentMessageWireSchema,
+        mapData: mapAgentMessageToEntity,
+      });
+    },
+
+    async cancelMessage(projectId: string, messageId: string): Promise<ApiResult<AgentMessage>> {
+      return apiRequestData({
+        url: `${messagesUrl(projectId)}/${encodeURIComponent(messageId)}/cancel`,
         method: "POST",
         withAuth: true,
-        body: formData,
-        fallbackMessage: "No se pudo procesar la imagen del diagrama.",
-        responseSchema: imageCommandResultWireSchema,
-        mapData: mapImageCommandResultToEntity,
+        fallbackMessage: "No se pudo solicitar la cancelación.",
+        responseSchema: agentMessageWireSchema,
+        mapData: mapAgentMessageToEntity,
       });
     },
   };
 }
 
-export const assistantRepositoryImpl: AssistantRepository =
-  createAssistantRepository();
+export const assistantRepositoryImpl: AssistantRepository = createAssistantRepository();

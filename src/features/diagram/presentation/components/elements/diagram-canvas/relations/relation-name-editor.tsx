@@ -3,7 +3,7 @@
 import { memo, useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
-import { diagramOperationQueueRepositoryImpl } from "@/features/diagram/infrastructure/storage/diagram-operation-queue.repository";
+import { createRenameDiagramRelation } from "@/features/diagram/application/use-cases/rename-diagram-relation";
 
 export type RelationNameEditorProps = {
   relationId: string;
@@ -30,16 +30,37 @@ export const RelationNameEditor = memo(function RelationNameEditor({
   const projectId = useAppStore((s) => s.projectId);
   const viewerId = useAppStore((s) => s.viewerId);
   const canEdit = useAppStore((s) => s.canEdit);
+  const relations = useAppStore((s) => s.relations);
   const setSelectedRelationId = useAppStore((s) => s.setSelectedRelationId);
-  const renameRelationOptimistic = useAppStore(
-    (s) => s.renameRelationOptimistic
-  );
+  const dispatchDiagramOperation = useAppStore((s) => s.dispatchDiagramOperation);
 
-  const isEffectiveDisabled = disabled || !canEdit;
+  const relation = relations.find((r) => r.id === relationId);
+  const isRelationReserved = useAppStore((s) =>
+    s.isComponentReservedByAgent(relationId, "relation")
+  );
+  const isSourceReserved = useAppStore((s) =>
+    relation ? s.isComponentReservedByAgent(relation.source.classId, "class") : false
+  );
+  const isTargetReserved = useAppStore((s) =>
+    relation ? s.isComponentReservedByAgent(relation.target.classId, "class") : false
+  );
+  const isBridgeReserved = useAppStore((s) =>
+    relation?.bridge ? s.isComponentReservedByAgent(relation.bridge.classId, "class") : false
+  );
+  const isAgentReserved =
+    isRelationReserved || isSourceReserved || isTargetReserved || isBridgeReserved;
+  const isEffectiveDisabled = disabled || !canEdit || isAgentReserved;
 
   const [isEditing, setIsEditing] = useState(false);
   const [nameValue, setNameValue] = useState(name);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isAgentReserved && isEditing) {
+      setIsEditing(false);
+      setNameValue(name);
+    }
+  }, [isAgentReserved, isEditing, name]);
 
   useEffect(() => {
     setNameValue(name);
@@ -65,6 +86,11 @@ export const RelationNameEditor = memo(function RelationNameEditor({
   };
 
   const handleCommit = async () => {
+    if (isEffectiveDisabled) {
+      setNameValue(name);
+      setIsEditing(false);
+      return;
+    }
     const trimmed = nameValue.trim();
     setIsEditing(false);
 
@@ -73,27 +99,14 @@ export const RelationNameEditor = memo(function RelationNameEditor({
       return;
     }
 
-    // 1. Proyección optimista
-    renameRelationOptimistic(relationId, trimmed);
-
-    // 2. Persistencia duradera en cola IndexedDB
     if (projectId && viewerId) {
       try {
-        await diagramOperationQueueRepositoryImpl.enqueue({
-          operationId: crypto.randomUUID(),
+        await createRenameDiagramRelation({ dispatch: dispatchDiagramOperation })(
           viewerId,
           projectId,
-          kind: "RENAME_RELATION",
           relationId,
-          payload: {
-            relationId,
-            name: trimmed,
-          },
-          createdAt: new Date().toISOString(),
-          attempts: 0,
-          state: "pending",
-        });
-        window.dispatchEvent(new CustomEvent("diagram:process-queue"));
+          trimmed
+        );
       } catch (err) {
         console.error("Error al encolar renombrado de relación:", err);
       }

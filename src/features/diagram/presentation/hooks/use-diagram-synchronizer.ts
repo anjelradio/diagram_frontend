@@ -3,23 +3,18 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
 import type { DiagramSnapshot } from "../../domain/entities/diagram-class.entity";
-import type {
-  CreateAttributePayload,
-  CreateClassPayload,
-  DeleteAttributePayload,
-  MoveClassPayload,
-  RenameClassPayload,
-  RepositionAttributePayload,
-  UpdateAttributePayload,
-  CreateRelationPayload,
-  RenameRelationPayload,
-  DeleteRelationPayload,
-} from "../../domain/entities/diagram-operation.entity";
 import { diagramClassRepositoryImpl } from "../../infrastructure/repositories/diagram-class.repository";
 import { diagramAttributeRepositoryImpl } from "../../infrastructure/repositories/diagram-attribute.repository";
 import { diagramRelationRepositoryImpl } from "../../infrastructure/repositories/diagram-relation.repository";
 import { diagramOperationQueueRepositoryImpl } from "../../infrastructure/storage/diagram-operation-queue.repository";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
+import { createExecuteDiagramOperation } from "../../application/use-cases/execute-diagram-operation";
+
+const executeDiagramOperation = createExecuteDiagramOperation({
+  classes: diagramClassRepositoryImpl,
+  attributes: diagramAttributeRepositoryImpl,
+  relations: diagramRelationRepositoryImpl,
+});
 
 const PERMANENT_ERROR_STATUSES = [400, 401, 403, 404, 409, 422];
 
@@ -84,107 +79,7 @@ export function useDiagramSynchronizer({
         let result: { ok: boolean; statusCode?: number; errors?: string[] };
 
         try {
-          switch (nextOp.kind) {
-            case "CREATE":
-            case "CREATE_CLASS":
-              result = await diagramClassRepositoryImpl.createClass(
-                projectId,
-                nextOp.payload as CreateClassPayload
-              );
-              break;
-            case "RENAME":
-            case "RENAME_CLASS":
-              result = await diagramClassRepositoryImpl.renameClass(
-                nextOp.classId,
-                nextOp.payload as RenameClassPayload
-              );
-              break;
-            case "MOVE":
-            case "MOVE_CLASS":
-              result = await diagramClassRepositoryImpl.moveClass(
-                nextOp.classId,
-                nextOp.payload as MoveClassPayload
-              );
-              break;
-            case "DELETE":
-            case "DELETE_CLASS":
-              result = await diagramClassRepositoryImpl.deleteClass(
-                nextOp.classId
-              );
-              break;
-
-            case "CREATE_ATTRIBUTE": {
-              const payload = nextOp.payload as CreateAttributePayload;
-              result = await diagramAttributeRepositoryImpl.createAttribute(
-                nextOp.classId,
-                {
-                  id: payload.id,
-                  name: payload.name,
-                  position: payload.position,
-                }
-              );
-              break;
-            }
-            case "UPDATE_ATTRIBUTE": {
-              const payload = nextOp.payload as UpdateAttributePayload;
-              result = await diagramAttributeRepositoryImpl.updateAttribute(
-                payload.attributeId,
-                {
-                  name: payload.name,
-                  dataType: payload.dataType,
-                  isNullable: payload.isNullable,
-                }
-              );
-              break;
-            }
-            case "REPOSITION_ATTRIBUTE": {
-              const payload = nextOp.payload as RepositionAttributePayload;
-              result = await diagramAttributeRepositoryImpl.repositionAttribute(
-                payload.attributeId,
-                {
-                  position: payload.position,
-                }
-              );
-              break;
-            }
-            case "DELETE_ATTRIBUTE": {
-              const payload = nextOp.payload as DeleteAttributePayload;
-              result = await diagramAttributeRepositoryImpl.deleteAttribute(
-                payload.attributeId
-              );
-              break;
-            }
-
-            case "CREATE_RELATION": {
-              const payload = nextOp.payload as CreateRelationPayload;
-              result = await diagramRelationRepositoryImpl.createRelation(
-                projectId,
-                payload
-              );
-              break;
-            }
-            case "RENAME_RELATION": {
-              const payload = nextOp.payload as RenameRelationPayload;
-              const relationId = nextOp.relationId || payload.relationId;
-              result = await diagramRelationRepositoryImpl.renameRelation(
-                relationId,
-                payload
-              );
-              break;
-            }
-            case "DELETE_RELATION": {
-              const payload = nextOp.payload as DeleteRelationPayload;
-              const relationId = nextOp.relationId || payload.relationId;
-              result = await diagramRelationRepositoryImpl.deleteRelation(
-                relationId
-              );
-              break;
-            }
-
-            default:
-              result = { ok: true };
-              break;
-          }
+          result = await executeDiagramOperation.execute(nextOp, projectId);
         } catch (err: unknown) {
           result = {
             ok: false,

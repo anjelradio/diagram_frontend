@@ -9,6 +9,7 @@ import type {
 import { useRealtimeSession } from "@/features/realtime/presentation/hooks/use-realtime-session";
 import { diagramRepositoryImpl } from "../../infrastructure/repositories/diagram.repository";
 import { diagramOperationQueueRepositoryImpl } from "../../infrastructure/storage/diagram-operation-queue.repository";
+import { shouldApplyRealtimeMutation } from "./realtime-mutation-policy";
 
 export type UseDiagramRealtimeBridgeOptions = {
   projectId: string;
@@ -72,13 +73,12 @@ export function useDiagramRealtimeBridge({
           break;
 
         case "diagramMutation":
-          if (message.mutation.senderId !== viewerId) {
+          if (shouldApplyRealtimeMutation(message.mutation.senderId, viewerId)) {
             store.applyRemoteMutation(
               message.mutation.operationType,
               message.mutation.data
             );
-            // No disparar refrescos intermedios para mutaciones del asistente:
-            // el asistente emite un flujo completo y consolida con agentFinished.
+            // Las mutaciones confirmadas del asistente también se aplican incrementalmente.
             if (
               message.mutation.senderId !== "assistant" &&
               [
@@ -92,8 +92,8 @@ export function useDiagramRealtimeBridge({
           }
           break;
 
-        case "agentFinished":
-          // Rehidratar inmediatamente el snapshot autoritativo al finalizar el agente
+        case "agentMessageFinished":
+          // Rehidratar el snapshot autoritativo al cerrarse el mensaje del agente.
           void refreshSnapshot(projectId, viewerId);
           break;
 

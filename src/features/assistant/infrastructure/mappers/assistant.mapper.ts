@@ -1,43 +1,39 @@
+import type { AgentMessage, AgentMessagePage } from "../../domain/entities/agent-message.entity";
 import type {
-  ImageCommandResult,
-  VoiceCommandResult,
-} from "../../domain/entities/agent-activity.entity";
-import type {
-  ImageCommandResultWire,
-  VoiceCommandResultWire,
+  AgentMessageActiveWire,
+  AgentMessagePageWire,
+  AgentMessageWire,
 } from "../schemas/assistant.schemas";
 
-export function mapVoiceCommandResultToEntity(
-  wire: VoiceCommandResultWire
-): VoiceCommandResult {
+export function mapAgentMessageToEntity(wire: AgentMessageWire): AgentMessage {
   return {
-    activityId: wire.activity_id,
-    state: wire.state,
-    transcription: wire.transcription ?? null,
-    resume: wire.resume ?? null,
-    actionsCount: wire.actions_count,
-    actions: wire.actions.map((a) => ({
-      type: a.type,
-      status: a.status,
-      summary: a.summary,
-    })),
+    id: wire.message_id,
+    projectId: wire.project_id,
+    userId: wire.user_id,
+    authorName: wire.author_name ?? wire.user_id,
+    authorAvatarUrl: wire.author_avatar_url ?? null,
+    prompt: wire.prompt,
+    imageUrl: wire.image_url,
+    status: wire.status,
+    cancelRequested: wire.cancel_requested,
+    responseMarkdown: wire.response_markdown,
+    createdAt: wire.created_at,
   };
 }
 
-export function mapImageCommandResultToEntity(
-  wire: ImageCommandResultWire
-): ImageCommandResult {
+export function mapAgentMessagePageToEntity(wire: AgentMessagePageWire): AgentMessagePage {
   return {
-    activityId: wire.activity_id,
-    state: wire.state,
-    transcription: wire.transcription ?? null,
-    resume: wire.resume ?? null,
-    imageUrl: wire.image_url ?? null,
-    actionsCount: wire.actions_count,
-    actions: wire.actions.map((a) => ({
-      type: a.type,
-      status: a.status,
-      summary: a.summary,
-    })),
+    items: wire.items.map(mapAgentMessageToEntity),
+    limit: wire.limit,
+    offset: wire.offset,
+    nextOffset: wire.next_offset,
+    hasMore: wire.has_more,
+    snapshotAt: wire.snapshot_at,
   };
+}
+
+export function mapActiveAgentMessageToEntity(
+  wire: AgentMessageActiveWire,
+): AgentMessage | null {
+  return wire.message ? mapAgentMessageToEntity(wire.message) : null;
 }

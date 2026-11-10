@@ -1,14 +1,14 @@
 "use client";
 
 import { memo, useRef, useState, useEffect } from "react";
-import { GripVertical, KeyRound } from "lucide-react";
+import { GripVertical, KeyRound, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DiagramAttribute } from "@/features/diagram/domain/entities/diagram-attribute.entity";
 import { useAppStore } from "@/features/shared/presentation/store/app-store";
-import { diagramOperationQueueRepositoryImpl } from "@/features/diagram/infrastructure/storage/diagram-operation-queue.repository";
 import { deriveDiagramAttributeCapabilities } from "@/features/diagram/domain/services/diagram-attribute-capabilities";
 import { sendRealtimeMessage } from "@/features/realtime/infrastructure/websocket/realtime-socket";
 import { AttributeTypePopover } from "./attribute-type-popover";
+import { createUpdateDiagramAttribute } from "@/features/diagram/application/use-cases/update-diagram-attribute";
 
 export type AttributeRowProps = {
   classId: string;
@@ -40,8 +40,17 @@ export const AttributeRow = memo(function AttributeRow({
   const storeCanEdit = useAppStore((s) => s.canEdit);
   const classLock = useAppStore((s) => s.classLocks[classId]);
   const viewerId = useAppStore((s) => s.viewerId);
+  const classReservation = useAppStore((s) =>
+    s.getEffectiveComponentReservation(classId, "class")
+  );
+  const isAgentReserved = Boolean(classReservation?.isReserved);
+  const isAttributeEditedByAgent = Boolean(
+    isAgentReserved &&
+    classReservation.activityType === "edit" &&
+    classReservation.attributeId === attribute.id
+  );
   const isLockedByOther = Boolean(classLock && classLock.userId !== viewerId);
-  const canEdit = (canEditProp ?? storeCanEdit) && !isLockedByOther;
+  const canEdit = (canEditProp ?? storeCanEdit) && !isLockedByOther && !isAgentReserved;
   const isPk = attribute.isPrimaryKey;
   const isFk = Boolean(attribute.isForeignKey);
   const capabilities = deriveDiagramAttributeCapabilities(attribute, canEdit);
@@ -49,9 +58,7 @@ export const AttributeRow = memo(function AttributeRow({
   const projectId = useAppStore((s) => s.projectId);
   const selectedAttribute = useAppStore((s) => s.selectedAttribute);
   const setSelectedAttribute = useAppStore((s) => s.setSelectedAttribute);
-  const updateAttributeOptimistic = useAppStore(
-    (s) => s.updateAttributeOptimistic
-  );
+  const dispatchDiagramOperation = useAppStore((s) => s.dispatchDiagramOperation);
 
   // Estado para edición inline del nombre del atributo
   const [isEditing, setIsEditing] = useState(false);
@@ -63,6 +70,13 @@ export const AttributeRow = memo(function AttributeRow({
   const nameTextRef = useRef<HTMLSpanElement>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [overflowDistance, setOverflowDistance] = useState(0);
+
+  useEffect(() => {
+    if (isAgentReserved && isEditing) {
+      setIsEditing(false);
+      setNameValue(attribute.name);
+    }
+  }, [isAgentReserved, isEditing, attribute.name]);
 
   useEffect(() => {
     setNameValue(attribute.name);
@@ -132,6 +146,11 @@ export const AttributeRow = memo(function AttributeRow({
   };
 
   const handleCommit = async () => {
+    if (!canEdit) {
+      setNameValue(attribute.name);
+      setIsEditing(false);
+      return;
+    }
     const trimmed = nameValue.trim();
     setIsEditing(false);
 
@@ -140,28 +159,14 @@ export const AttributeRow = memo(function AttributeRow({
       return;
     }
 
-    // Actualización optimista en el cliente
-    updateAttributeOptimistic(classId, attribute.id, { name: trimmed });
-
-    // Encolar operación durable UPDATE_ATTRIBUTE en IndexedDB
     if (projectId && viewerId) {
       try {
-        await diagramOperationQueueRepositoryImpl.enqueue({
-          operationId: crypto.randomUUID(),
+        await createUpdateDiagramAttribute({ dispatch: dispatchDiagramOperation })(
           viewerId,
           projectId,
-          kind: "UPDATE_ATTRIBUTE",
           classId,
-          payload: {
-            attributeId: attribute.id,
-            name: trimmed,
-          },
-          createdAt: new Date().toISOString(),
-          attempts: 0,
-          state: "pending",
-        });
-
-        window.dispatchEvent(new CustomEvent("diagram:process-queue"));
+          { attributeId: attribute.id, name: trimmed }
+        );
       } catch (err) {
         console.error("Error al encolar renombrado de atributo:", err);
       }
@@ -191,11 +196,13 @@ export const AttributeRow = memo(function AttributeRow({
         "group/attr flex items-center justify-between text-xs py-1.5 px-2.5 rounded-md transition-colors select-none",
         isRowSelected
           ? "bg-indigo-500/15 ring-1 ring-inset ring-indigo-500/45"
+          : isAttributeEditedByAgent
+            ? "bg-purple-950/40 ring-1 ring-inset ring-purple-500/50 text-purple-200"
           : canEdit ? "hover:bg-white/[0.045]" : "",
         capabilities.canRename || capabilities.canDelete ? "cursor-pointer" : "cursor-default"
       )}
       role="row"
-      aria-label={`Atributo ${attribute.name}${isPk ? " Llave Primaria" : isFk ? " Llave Foránea" : ""}`}
+      aria-label={`Atributo ${attribute.name}${isPk ? " Llave Primaria" : isFk ? " Llave Foránea" : ""}${isAttributeEditedByAgent ? " (Editando por el asistente)" : ""}`}
       tabIndex={capabilities.canDelete ? 0 : -1}
       onKeyDown={(e) => {
         if (capabilities.canDelete && (e.key === "Enter" || e.key === " ")) {
@@ -208,6 +215,15 @@ export const AttributeRow = memo(function AttributeRow({
     >
       {/* Zona izquierda: estado de clave y nombre */}
       <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-3">
+        {isAttributeEditedByAgent && (
+          <span
+            title="Atributo en edición por el asistente"
+            className="inline-flex items-center gap-1 text-[9px] font-medium text-purple-300 bg-purple-950/80 px-1 py-0.5 rounded border border-purple-500/40 select-none flex-shrink-0"
+          >
+            <Pencil className="h-2 w-2 text-purple-400 motion-reduce:animate-none animate-pulse" aria-hidden="true" />
+            <span>Editando</span>
+          </span>
+        )}
         {isPk ? (
           <span
             title="Llave primaria (UUID inmutable)"

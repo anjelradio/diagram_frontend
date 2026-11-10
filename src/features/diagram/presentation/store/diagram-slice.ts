@@ -7,22 +7,22 @@ import type {
   DiagramSnapshot,
 } from "../../domain/entities/diagram-class.entity.ts";
 import type { DiagramOperation } from "../../domain/entities/diagram-operation.entity.ts";
+import type { DispatchDiagramOperationCommand } from "../../application/ports/diagram-operation-dispatcher.port.ts";
+import type { DiagramOperationDispatcherPort } from "../../application/ports/diagram-operation-dispatcher.port.ts";
+import { createCreateDiagramRelation } from "../../application/use-cases/create-diagram-relation.ts";
 
 import type {
   DiagramCardinality,
   DiagramRelation,
   DiagramRelationHandle,
-  DiagramRelationType,
   RelationPreset,
   RelationCreationDraft,
   VertexPopoverAnchor,
   VertexOptionItem,
 } from "../../domain/entities/diagram-relation.entity.ts";
 import {
-  planRelationCreation,
   type PlannedRelationAggregate,
 } from "../../domain/services/diagram-relation-planner.ts";
-import { diagramOperationQueueRepositoryImpl } from "../../infrastructure/storage/diagram-operation-queue.repository.ts";
 import {
   projectDiagramOperation,
   projectDiagramOperations,
@@ -122,6 +122,10 @@ export type DiagramSlice = {
     snapshot: DiagramSnapshot,
     pendingOps?: DiagramOperation[]
   ) => void;
+  applyDiagramOperation: (operation: DiagramOperation) => void;
+  dispatchDiagramOperation: (
+    operation: DispatchDiagramOperationCommand
+  ) => Promise<DiagramOperation>;
   onNodesChange: (changes: NodeChange<DiagramClassNodeType>[]) => void;
   addOptimisticClass: (newClass: DiagramClassWithAttributes | DiagramClass) => void;
   updateClassNameOptimistic: (id: string, name: string) => void;
@@ -146,12 +150,9 @@ export type DiagramSlice = {
   applyRemoteMutation: (operationType: string, data: Record<string, unknown>) => void;
 };
 
-export const createDiagramSlice: StateCreator<
-  DiagramSlice,
-  [],
-  [],
-  DiagramSlice
-> = (set, get) => ({
+export const createDiagramSlice = (
+  dispatcher: DiagramOperationDispatcherPort
+): StateCreator<DiagramSlice, [], [], DiagramSlice> => (set, get) => ({
   projectId: null,
   viewerId: null,
   canEdit: false,
@@ -226,6 +227,62 @@ export const createDiagramSlice: StateCreator<
         referencedClassId: (raw.referenced_class_id ?? raw.referencedClassId ?? null) as string | null,
         relationId: (raw.relation_id ?? raw.relationId ?? null) as string | null,
       });
+      const applyMaterializedClasses = (nodes: typeof state.nodes): DiagramClassNodeType[] => {
+        const snapshots = Array.isArray(data.materialized_classes)
+          ? (data.materialized_classes as Record<string, unknown>[])
+          : [];
+        return snapshots.reduce<DiagramClassNodeType[]>((currentNodes, snapshot) => {
+          const snapshotId = String(snapshot.id ?? "");
+          if (!snapshotId) return currentNodes;
+          const attributes = Array.isArray(snapshot.attributes)
+            ? (snapshot.attributes as Record<string, unknown>[]).map(normalizeAttr)
+            : [];
+          const existing = currentNodes.find((node) => node.id === snapshotId);
+          if (!existing) {
+            return [
+              ...currentNodes,
+              {
+                id: snapshotId,
+                type: "diagramClass" as const,
+                position: {
+                  x: Number(snapshot.position_x ?? 0),
+                  y: Number(snapshot.position_y ?? 0),
+                },
+                data: { id: snapshotId, name: String(snapshot.name ?? ""), attributes },
+              } as DiagramClassNodeType,
+            ];
+          }
+
+          const currentAttributes = existing.data.attributes || [];
+          const mergedAttributes = currentAttributes.filter(
+            (attribute) => !attributes.some((incoming) => incoming.id === attribute.id)
+          );
+          return currentNodes.map((node) => node.id !== snapshotId ? node : {
+            ...node,
+            data: {
+              ...node.data,
+              attributes: [...mergedAttributes, ...attributes].sort((left, right) => left.position - right.position),
+            },
+          });
+        }, nodes);
+      };
+      const removeMaterializedEntities = (nodes: typeof state.nodes) => {
+        const removedClassIds = new Set(
+          Array.isArray(data.removed_class_ids) ? data.removed_class_ids.map(String) : []
+        );
+        const removedAttributeIds = new Set(
+          Array.isArray(data.removed_attribute_ids) ? data.removed_attribute_ids.map(String) : []
+        );
+        return nodes
+          .filter((node) => !removedClassIds.has(node.id))
+          .map((node) => ({
+            ...node,
+            data: {
+              ...node.data,
+              attributes: (node.data.attributes || []).filter((attribute) => !removedAttributeIds.has(attribute.id)),
+            },
+          }));
+      };
 
       if (operationType === "MOVE_CLASS") return { nodes: state.nodes.map((n) => n.id === classId ? { ...n, position: { x: Number(data.position_x ?? 0), y: Number(data.position_y ?? 0) } } : n) };
       if (operationType === "RENAME_CLASS") return { nodes: state.nodes.map((n) => n.id === classId ? { ...n, data: { ...n.data, name: String(data.name) } } : n) };
@@ -329,17 +386,29 @@ export const createDiagramSlice: StateCreator<
       }
       if (operationType === "DELETE_ATTRIBUTE") return { nodes: state.nodes.map((n) => n.id === classId ? { ...n, data: { ...n.data, attributes: (n.data.attributes || []).filter((a) => a.id !== attributeId) } } : n) };
       if (operationType === "RENAME_RELATION") return { relations: state.relations.map((r) => r.id === String(data.relation_id) ? { ...r, name: String(data.name) } : r) };
-      if (operationType === "DELETE_RELATION") return { relations: state.relations.filter((r) => r.id !== String(data.relation_id)) };
+      if (operationType === "DELETE_RELATION") {
+        const nodes = removeMaterializedEntities(applyMaterializedClasses(state.nodes));
+        return {
+          nodes,
+          relations: state.relations.filter((relation) => relation.id !== String(data.relation_id)),
+        };
+      }
       if (operationType === "CREATE_RELATION") {
         const source = (data.source || {}) as Record<string, unknown>;
         const target = (data.target || {}) as Record<string, unknown>;
+        const bridge = data.bridge as Record<string, unknown> | null | undefined;
         const relation = {
           id: String(data.id), name: String(data.name || ""), relationType: String(data.relation_type || data.relationType),
           source: { classId: String(source.class_id || source.classId), handle: String(source.handle), cardinality: source.cardinality ?? null },
           target: { classId: String(target.class_id || target.classId), handle: String(target.handle), cardinality: target.cardinality ?? null },
-          bridge: null,
+          bridge: bridge?.class_id
+            ? { classId: String(bridge.class_id), handle: String(bridge.handle) }
+            : null,
         } as unknown as DiagramRelation;
-        return { relations: [...state.relations, relation] };
+        return {
+          nodes: applyMaterializedClasses(state.nodes),
+          relations: [...state.relations.filter((item) => item.id !== relation.id), relation],
+        };
       }
       return {};
     });
@@ -506,44 +575,25 @@ export const createDiagramSlice: StateCreator<
       positionY: n.position.y,
     }));
 
-    const aggregate = planRelationCreation({
-      sourceClass,
-      targetClass,
-      relationType: "ASSOCIATION",
-      sourceCardinality: draft.sourceCardinality,
-      targetCardinality,
-      sourceHandle: draft.source.handle,
-      targetHandle: draft.target.handle,
-      existingClasses,
-    });
-
-    if (typeof window !== "undefined" && state.projectId && state.viewerId) {
+    if (state.projectId && state.viewerId) {
       try {
-        await diagramOperationQueueRepositoryImpl.enqueue({
-          operationId: crypto.randomUUID(),
+        await createCreateDiagramRelation({ dispatch: state.dispatchDiagramOperation })({
           viewerId: state.viewerId,
           projectId: state.projectId,
-          kind: "CREATE_RELATION",
-          classId: aggregate.relation.source.classId,
-          payload: {
-            id: aggregate.relation.id,
-            name: aggregate.relation.name,
-            relationType: aggregate.relation.relationType,
-            source: aggregate.relation.source,
-            target: aggregate.relation.target,
-            materialization: aggregate.materialization,
-          },
-          createdAt: new Date().toISOString(),
-          attempts: 0,
-          state: "pending",
+          sourceClass,
+          targetClass,
+          relationType: "ASSOCIATION",
+          sourceCardinality: draft.sourceCardinality,
+          targetCardinality,
+          sourceHandle: draft.source.handle,
+          targetHandle: draft.target.handle,
+          existingClasses,
         });
-        window.dispatchEvent(new CustomEvent("diagram:process-queue"));
       } catch (err) {
         console.error("Error encolando creación de relación asociativa:", err);
+        return;
       }
     }
-
-    state.addOptimisticRelationAggregate(aggregate);
     set({
       relationDraft: null,
       activeVertexPopover: null,
@@ -592,44 +642,23 @@ export const createDiagramSlice: StateCreator<
       positionY: n.position.y,
     }));
 
-    const aggregate = planRelationCreation({
-      sourceClass,
-      targetClass,
-      relationType: draft.selectedRelationType || "GENERALIZATION",
-      sourceCardinality: null,
-      targetCardinality: null,
-      sourceHandle: draft.source.handle,
-      targetHandle,
-      existingClasses,
-    });
-
-    if (typeof window !== "undefined" && state.projectId && state.viewerId) {
+    if (state.projectId && state.viewerId) {
       try {
-        await diagramOperationQueueRepositoryImpl.enqueue({
-          operationId: crypto.randomUUID(),
+        await createCreateDiagramRelation({ dispatch: state.dispatchDiagramOperation })({
           viewerId: state.viewerId,
           projectId: state.projectId,
-          kind: "CREATE_RELATION",
-          classId: aggregate.relation.source.classId,
-          payload: {
-            id: aggregate.relation.id,
-            name: aggregate.relation.name,
-            relationType: aggregate.relation.relationType,
-            source: aggregate.relation.source,
-            target: aggregate.relation.target,
-            materialization: aggregate.materialization,
-          },
-          createdAt: new Date().toISOString(),
-          attempts: 0,
-          state: "pending",
+          sourceClass,
+          targetClass,
+          relationType: draft.selectedRelationType || "GENERALIZATION",
+          sourceHandle: draft.source.handle,
+          targetHandle,
+          existingClasses,
         });
-        window.dispatchEvent(new CustomEvent("diagram:process-queue"));
       } catch (err) {
         console.error("Error encolando creación de relación estructural:", err);
+        return;
       }
     }
-
-    state.addOptimisticRelationAggregate(aggregate);
     set({
       relationDraft: null,
       activeVertexPopover: null,
@@ -739,24 +768,6 @@ export const createDiagramSlice: StateCreator<
         });
       }
 
-      if (aggregate.sharedPrimaryKeyAttribute) {
-        const spk = aggregate.sharedPrimaryKeyAttribute;
-        nextNodes = nextNodes.map((node) => {
-          if (node.id !== spk.classId) return node;
-          const currentAttrs = node.data.attributes || [];
-          const updatedAttrs = currentAttrs.map((a) =>
-            a.id === spk.id ? { ...spk } : a
-          );
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              attributes: updatedAttrs,
-            },
-          };
-        });
-      }
-
       return {
         nodes: nextNodes,
         relations: [...state.relations, aggregate.relation],
@@ -796,6 +807,45 @@ export const createDiagramSlice: StateCreator<
       };
     });
   },
+
+  applyDiagramOperation: (operation) => {
+    const current = get();
+    const projected = projectDiagramOperation(
+      {
+        classes: current.nodes.map((node) => ({
+          id: node.id,
+          name: node.data.name,
+          positionX: node.position.x,
+          positionY: node.position.y,
+          attributes: node.data.attributes,
+        })),
+        relations: current.relations,
+      },
+      operation
+    );
+
+    set((state) => ({
+      nodes: projected.classes.map((cls) => {
+        const existingNode = state.nodes.find((node) => node.id === cls.id);
+        return {
+          id: cls.id,
+          type: "diagramClass",
+          position: { x: cls.positionX, y: cls.positionY },
+          selected: existingNode?.selected,
+          data: {
+            id: cls.id,
+            name: cls.name,
+            attributes: [...(cls.attributes || [])].sort(
+              (a, b) => a.position - b.position
+            ),
+          },
+        };
+      }),
+      relations: projected.relations,
+    }));
+  },
+
+  dispatchDiagramOperation: (operation) => dispatcher.dispatch(operation),
 
   onNodesChange: (changes) => {
     set((state) => ({

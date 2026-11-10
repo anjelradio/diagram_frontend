@@ -71,9 +71,7 @@ export function useRealtimeSession({
         case "presenceSnapshot":
           store.setPresence(message.peers);
           store.setClassLocks(message.classLocks);
-          if (message.agentLock) {
-            store.acquireAgentLock(message.agentLock);
-          }
+          store.setAgentReservations(message.agentComponentReservations ?? []);
           break;
 
         case "userJoined":
@@ -131,15 +129,51 @@ export function useRealtimeSession({
           store.setLastRemoteMutation(message.mutation);
           break;
 
-        case "agentLock":
-          store.acquireAgentLock({
-            activityId: message.activityId,
-            userId: message.userId,
-          });
+        case "agentMessageFinished":
+          if (message.message.projectId === projectId) {
+            const authorName = store.presence[message.message.userId]?.userName;
+            store.applyAssistantMessageFinished(
+              projectId,
+              authorName ? { ...message.message, authorName } : message.message,
+              viewerId
+            );
+            store.releaseAgentReservationsByMessage(message.message.id);
+          }
           break;
 
-        case "agentFinished":
-          store.releaseAgentLock(message.activityId);
+        case "agentMessageAccepted":
+          if (message.message.projectId === projectId) {
+            const authorName = store.presence[message.message.userId]?.userName;
+            store.acceptAssistantMessage(
+              projectId,
+              authorName
+                ? { ...message.message, authorName }
+                : message.message,
+              viewerId
+            );
+          }
+          break;
+
+        case "agentMessageActivity":
+          if (message.projectId === projectId) {
+            store.applyAssistantMessageActivity(projectId, {
+              projectId: message.projectId,
+              messageId: message.messageId,
+              attemptId: message.attemptId,
+              sequence: message.sequence,
+              activityCode: message.activityCode,
+              activityType: message.activityType,
+              occurredAt: message.occurredAt,
+            });
+          }
+          break;
+
+        case "agentComponentReserved":
+          store.upsertAgentReservation(message.reservation);
+          break;
+
+        case "agentComponentReservationsReleased":
+          store.releaseAgentReservationsByMessage(message.messageId);
           break;
 
         case "pong":
@@ -155,7 +189,15 @@ export function useRealtimeSession({
       projectId,
       role,
       onMessage: handleMessage,
-      onStatus: setStatus,
+      onStatus: (status) => {
+        setStatus(status);
+        if (status === "connected" || status === "disconnected") {
+          useAppStore.getState().setAssistantActivityConnection(
+            projectId,
+            status === "connected"
+          );
+        }
+      },
     });
 
     setActiveRealtimeSocket(socket);

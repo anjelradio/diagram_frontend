@@ -24,19 +24,21 @@ import { UmlRelationMarkers } from "./relations/uml-relation-markers";
 import { VertexRelationPopover } from "./relations/vertex-relation-popover";
 import { RelationRubberbandOverlay } from "./relations/relation-rubberband-overlay";
 import { convertRelationsToEdges } from "./relations/diagram-relation-edge.utils";
-import { getHandleConfig } from "./diagram-class-node/relation-handles-config";
 import { getHandlePoint } from "./relations/relation-handle-geometry";
 import {
-  planRelationCreation,
-
   resolveOptimalHandles,
 } from "@/features/diagram/domain/services/diagram-relation-planner";
+import { createCreateDiagramRelation } from "@/features/diagram/application/use-cases/create-diagram-relation";
+import { createDeleteDiagramRelation } from "@/features/diagram/application/use-cases/delete-diagram-relation";
+import { createCreateDiagramClass } from "@/features/diagram/application/use-cases/create-diagram-class";
+import { createMoveDiagramClass } from "@/features/diagram/application/use-cases/move-diagram-class";
+import { createDeleteDiagramClass } from "@/features/diagram/application/use-cases/delete-diagram-class";
+import { createDeleteDiagramAttribute } from "@/features/diagram/application/use-cases/delete-diagram-attribute";
 
 import {
   useAppStore,
 } from "@/features/shared/presentation/store/app-store";
 import type { DiagramClassNodeType } from "@/features/diagram/presentation/store/diagram-slice";
-import { diagramOperationQueueRepositoryImpl } from "@/features/diagram/infrastructure/storage/diagram-operation-queue.repository";
 import type { DiagramClassWithAttributes } from "@/features/diagram/domain/entities/diagram-class.entity";
 import type { CreateClassPayload } from "@/features/diagram/domain/entities/diagram-operation.entity";
 import type {
@@ -81,37 +83,44 @@ export function DiagramFlowCanvas({
   const onNodesChange = useAppStore((s) => s.onNodesChange);
   const projectId = useAppStore((s) => s.projectId);
   const viewerId = useAppStore((s) => s.viewerId);
-  const addOptimisticClass = useAppStore((s) => s.addOptimisticClass);
   const updateClassPositionOptimistic = useAppStore(
     (s) => s.updateClassPositionOptimistic
   );
-  const removeNodesOptimistic = useAppStore((s) => s.removeNodesOptimistic);
-  const removeAttributeOptimistic = useAppStore(
-    (s) => s.removeAttributeOptimistic
-  );
+  const dispatchDiagramOperation = useAppStore((s) => s.dispatchDiagramOperation);
   const setSelectedAttribute = useAppStore((s) => s.setSelectedAttribute);
   const setActiveTool = useAppStore((s) => s.setActiveTool);
   const relations = useAppStore((s) => s.relations);
   const selectedRelationId = useAppStore((s) => s.selectedRelationId);
   const setSelectedRelationId = useAppStore((s) => s.setSelectedRelationId);
-  const removeRelationOptimistic = useAppStore(
-    (s) => s.removeRelationOptimistic
-  );
-  const addOptimisticRelationAggregate = useAppStore(
-    (s) => s.addOptimisticRelationAggregate
-  );
   const selectRelationPreset = useAppStore((s) => s.selectRelationPreset);
   const setRelationDraftSource = useAppStore((s) => s.setRelationDraftSource);
   const canEdit = useAppStore((s) => s.canEdit);
   const classLocks = useAppStore((s) => s.classLocks);
+  const agentReservations = useAppStore((s) => s.agentReservations);
+  const dragStartPositionsRef = useRef(
+    new Map<string, { x: number; y: number }>()
+  );
 
-  // React Flow respeta `draggable` por nodo: evita iniciar un arrastre ajeno.
+  // React Flow respeta `draggable` por nodo: evita iniciar un arrastre ajeno o reservado por el agente.
   const interactiveNodes = useMemo(
-    () => nodes.map((node) => ({
-      ...node,
-      draggable: canEdit && !isTemporaryHand && activeTool !== "create-class" && (!classLocks[node.id] || classLocks[node.id]?.userId === viewerId),
-    })),
-    [activeTool, canEdit, classLocks, isTemporaryHand, nodes, viewerId]
+    () =>
+      nodes.map((node) => {
+        const isReserved = Object.values(agentReservations).some(
+          (r) => r.componentId === node.id && r.componentType === "class"
+        );
+        const lock = classLocks[node.id];
+        const isLockedByOther = Boolean(lock && lock.userId !== viewerId);
+        return {
+          ...node,
+          draggable:
+            canEdit &&
+            !isTemporaryHand &&
+            activeTool !== "create-class" &&
+            !isLockedByOther &&
+            !isReserved,
+        };
+      }),
+    [activeTool, canEdit, classLocks, agentReservations, isTemporaryHand, nodes, viewerId]
   );
 
   const edges = useMemo(
@@ -184,7 +193,7 @@ export function DiagramFlowCanvas({
     if (!node) return relationDraft.source.flowPosition;
     const pt = getHandlePoint(node, relationDraft.source.handle);
     return { x: pt.x, y: pt.y };
-  }, [relationDraft?.source, nodes]);
+  }, [relationDraft, nodes]);
 
   const isHandActive = isTemporaryHand || activeTool === "hand";
   const isSelectActive = !isTemporaryHand && activeTool === "select";
@@ -198,6 +207,13 @@ export function DiagramFlowCanvas({
       params: { nodeId?: string | null; handleId?: string | null }
     ) => {
       if (params.nodeId && params.handleId) {
+        const isReserved = useAppStore
+          .getState()
+          .isComponentReservedByAgent(params.nodeId, "class");
+        if (isReserved) {
+          appToast.error("El asistente está utilizando esta clase.");
+          return;
+        }
         // Las relaciones no están bloqueadas por la edición exclusiva de una clase.
         useAppStore.getState().setRelationDraftSource({
           classId: params.nodeId,
@@ -221,8 +237,13 @@ export function DiagramFlowCanvas({
   // Validación de arista: permitir autorrelación únicamente para ASSOCIATION
   const isValidConnection = useCallback((connection: Edge | Connection) => {
     if (!connection.source || !connection.target) return false;
+    const state = useAppStore.getState();
+    const isSourceReserved = state.isComponentReservedByAgent(connection.source, "class");
+    const isTargetReserved = state.isComponentReservedByAgent(connection.target, "class");
+    if (isSourceReserved || isTargetReserved) {
+      return false;
+    }
     if (connection.source === connection.target) {
-      const state = useAppStore.getState();
       const preset = state.activeRelationPreset;
       const custom = state.customRelationDraft;
       const relType = preset?.relationType ?? (custom ? "ASSOCIATION" : null);
@@ -245,6 +266,13 @@ export function DiagramFlowCanvas({
       if (!connection.source || !connection.target) return;
 
       const state = useAppStore.getState();
+      const isSourceReserved = state.isComponentReservedByAgent(connection.source, "class");
+      const isTargetReserved = state.isComponentReservedByAgent(connection.target, "class");
+      if (isSourceReserved || isTargetReserved) {
+        appToast.error("No se puede conectar una clase reservada por el asistente.");
+        return;
+      }
+
       const preset = state.activeRelationPreset;
       const custom = state.customRelationDraft;
 
@@ -349,43 +377,19 @@ export function DiagramFlowCanvas({
 
 
 
-      const aggregate = planRelationCreation({
-        sourceClass,
-        targetClass,
-        relationType,
-        sourceCardinality,
-        targetCardinality,
-        sourceHandle,
-        targetHandle,
-        existingClasses,
-      });
-
       try {
-        // 1. Encolar durablemente en IndexedDB antes de proyectar
-        await diagramOperationQueueRepositoryImpl.enqueue({
-          operationId: crypto.randomUUID(),
+        await createCreateDiagramRelation({ dispatch: dispatchDiagramOperation })({
           viewerId,
           projectId,
-          kind: "CREATE_RELATION",
-          classId: aggregate.relation.source.classId,
-          payload: {
-            id: aggregate.relation.id,
-            name: aggregate.relation.name,
-            relationType: aggregate.relation.relationType,
-            source: aggregate.relation.source,
-            target: aggregate.relation.target,
-            materialization: aggregate.materialization,
-          },
-          createdAt: new Date().toISOString(),
-          attempts: 0,
-          state: "pending",
+          sourceClass,
+          targetClass,
+          relationType,
+          sourceCardinality,
+          targetCardinality,
+          sourceHandle,
+          targetHandle,
+          existingClasses,
         });
-
-        // 2. Proyección optimista atómica en el store
-        addOptimisticRelationAggregate(aggregate);
-
-        // 3. Disparar sincronizador
-        window.dispatchEvent(new CustomEvent("diagram:process-queue"));
 
         // 4. Retorno automático a herramienta cursor
         selectRelationPreset(null);
@@ -401,7 +405,7 @@ export function DiagramFlowCanvas({
       canEdit,
       projectId,
       viewerId,
-      addOptimisticRelationAggregate,
+      dispatchDiagramOperation,
       selectRelationPreset,
       setRelationDraftSource,
       setActiveTool,
@@ -470,42 +474,12 @@ export function DiagramFlowCanvas({
       },
     };
 
-    const newClass: DiagramClassWithAttributes = {
-      id: newId,
-      name: "Nueva clase",
-      positionX: position.x,
-      positionY: position.y,
-      attributes: [
-        {
-          id: primaryAttributeId,
-          name: "id",
-          dataType: "UUID",
-          position: 0,
-          isPrimaryKey: true,
-          isNullable: false,
-        },
-      ],
-    };
-
     try {
-      // 1. Persistencia duradera en cola IndexedDB antes del estado optimista
-      await diagramOperationQueueRepositoryImpl.enqueue({
-        operationId: crypto.randomUUID(),
+      await createCreateDiagramClass({ dispatch: dispatchDiagramOperation })(
         viewerId,
         projectId,
-        kind: "CREATE",
-        classId: newId,
-        payload: createPayload,
-        createdAt: new Date().toISOString(),
-        attempts: 0,
-        state: "pending",
-      });
-
-      // 2. Aplicación optimista en el lienzo
-      addOptimisticClass(newClass);
-
-      // 3. Disparo de sincronización
-      window.dispatchEvent(new CustomEvent("diagram:process-queue"));
+        createPayload
+      );
 
       // 4. Retorno al puntero
       onClassCreated?.();
@@ -549,6 +523,12 @@ export function DiagramFlowCanvas({
   const handleNodeDragStart = useCallback(
     (_event: MouseEvent | TouchEvent, node: DiagramClassNodeType) => {
       if (!canEdit) return;
+      const isReserved = useAppStore.getState().isComponentReservedByAgent(node.id, "class");
+      if (isReserved) return;
+      const currentNode = useAppStore.getState().nodes.find((item) => item.id === node.id);
+      if (currentNode) {
+        dragStartPositionsRef.current.set(node.id, { ...currentNode.position });
+      }
       const currentLock = useAppStore.getState().classLocks[node.id];
       if (!currentLock || currentLock.userId === viewerId) {
         sendRealtimeMessage({ type: "class_lock_acquire", class_id: node.id });
@@ -572,30 +552,27 @@ export function DiagramFlowCanvas({
     node: DiagramClassNodeType
   ) => {
     if (!projectId || !viewerId) return;
+    const isReserved = useAppStore.getState().isComponentReservedByAgent(node.id, "class");
+    if (isReserved) {
+      const startPosition = dragStartPositionsRef.current.get(node.id);
+      if (startPosition) {
+        updateClassPositionOptimistic(node.id, startPosition);
+      }
+      dragStartPositionsRef.current.delete(node.id);
+      return;
+    }
     const lock = useAppStore.getState().classLocks[node.id];
     if (lock && lock.userId !== viewerId) return;
 
-    updateClassPositionOptimistic(node.id, {
-      x: node.position.x,
-      y: node.position.y,
-    });
-
     try {
-      await diagramOperationQueueRepositoryImpl.enqueue({
-        operationId: crypto.randomUUID(),
+      await createMoveDiagramClass({ dispatch: dispatchDiagramOperation })(
         viewerId,
         projectId,
-        kind: "MOVE",
-        classId: node.id,
-        payload: {
-          positionX: node.position.x,
-          positionY: node.position.y,
-        },
-        createdAt: new Date().toISOString(),
-        attempts: 0,
-        state: "pending",
-      });
-      window.dispatchEvent(new CustomEvent("diagram:process-queue"));
+        node.id,
+        node.position.x,
+        node.position.y
+      );
+      dragStartPositionsRef.current.delete(node.id);
       sendRealtimeMessage({
         type: "class_drag",
         class_id: node.id,
@@ -609,6 +586,11 @@ export function DiagramFlowCanvas({
         sendRealtimeMessage({ type: "class_lock_release", class_id: node.id });
       }
     } catch (err) {
+      const startPosition = dragStartPositionsRef.current.get(node.id);
+      if (startPosition) {
+        updateClassPositionOptimistic(node.id, startPosition);
+      }
+      dragStartPositionsRef.current.delete(node.id);
       console.error("Error moviendo clase:", err);
     }
   };
@@ -640,6 +622,14 @@ export function DiagramFlowCanvas({
       // Prioridad 1: Si hay un atributo secundario seleccionado, eliminarlo
       const selectedAttr = useAppStore.getState().selectedAttribute;
       if (selectedAttr) {
+        const isClassReserved = useAppStore
+          .getState()
+          .isComponentReservedByAgent(selectedAttr.classId, "class");
+        if (isClassReserved) {
+          appToast.error("La clase está reservada por el asistente.");
+          return;
+        }
+
         const targetNode = useAppStore
           .getState()
           .nodes.find((n) => n.id === selectedAttr.classId);
@@ -655,28 +645,13 @@ export function DiagramFlowCanvas({
 
           e.preventDefault();
 
-          // Eliminación optimista en el cliente
-          removeAttributeOptimistic(
-            selectedAttr.classId,
-            selectedAttr.attributeId
-          );
-
-          // Encolar operación durable DELETE_ATTRIBUTE en IndexedDB
           try {
-            await diagramOperationQueueRepositoryImpl.enqueue({
-              operationId: crypto.randomUUID(),
+            await createDeleteDiagramAttribute({ dispatch: dispatchDiagramOperation })(
               viewerId,
               projectId,
-              kind: "DELETE_ATTRIBUTE",
-              classId: selectedAttr.classId,
-              payload: {
-                attributeId: selectedAttr.attributeId,
-              },
-              createdAt: new Date().toISOString(),
-              attempts: 0,
-              state: "pending",
-            });
-            window.dispatchEvent(new CustomEvent("diagram:process-queue"));
+              selectedAttr.classId,
+              { attributeId: selectedAttr.attributeId }
+            );
           } catch (err) {
             console.error("Error al encolar eliminación de atributo:", err);
           }
@@ -685,40 +660,39 @@ export function DiagramFlowCanvas({
       }
 
       // Prioridad 2: Si hay una relación seleccionada, eliminarla
-      const selectedRelationId = useAppStore.getState().selectedRelationId;
+      const state = useAppStore.getState();
+      const selectedRelationId = state.selectedRelationId;
       if (selectedRelationId) {
+        const rel = state.relations.find((r) => r.id === selectedRelationId);
+        const isRelReserved = state.isComponentReservedByAgent(selectedRelationId, "relation");
+        const isSourceReserved = rel ? state.isComponentReservedByAgent(rel.source.classId, "class") : false;
+        const isTargetReserved = rel ? state.isComponentReservedByAgent(rel.target.classId, "class") : false;
+        const isBridgeReserved = rel?.bridge ? state.isComponentReservedByAgent(rel.bridge.classId, "class") : false;
+        if (isRelReserved || isSourceReserved || isTargetReserved || isBridgeReserved) {
+          appToast.error("No se puede eliminar una relación reservada por el asistente.");
+          return;
+        }
+
         e.preventDefault();
 
-        // Eliminación optimista en el cliente (incluye cascada de puente y FK)
-        removeRelationOptimistic(selectedRelationId);
-
         try {
-          await diagramOperationQueueRepositoryImpl.enqueue({
-            operationId: crypto.randomUUID(),
+          await createDeleteDiagramRelation({ dispatch: dispatchDiagramOperation })(
             viewerId,
             projectId,
-            kind: "DELETE_RELATION",
-            relationId: selectedRelationId,
-            payload: {
-              relationId: selectedRelationId,
-            },
-            createdAt: new Date().toISOString(),
-            attempts: 0,
-            state: "pending",
-          });
-          window.dispatchEvent(new CustomEvent("diagram:process-queue"));
+            selectedRelationId
+          );
         } catch (err) {
           console.error("Error al encolar eliminación de relación:", err);
         }
         return;
       }
 
-      // Prioridad 3: Clases seleccionadas (excluyendo las bloqueadas por otro usuario)
-      const state = useAppStore.getState();
+      // Prioridad 3: Clases seleccionadas (excluyendo las bloqueadas por otro usuario o reservadas por el agente)
       const selectedNodes = state.nodes.filter((n) => {
         if (!n.selected) return false;
         const lock = state.classLocks[n.id];
-        return !lock || lock.userId === viewerId;
+        const isReserved = state.isComponentReservedByAgent(n.id, "class");
+        return (!lock || lock.userId === viewerId) && !isReserved;
       });
       if (selectedNodes.length === 0) return;
 
@@ -741,21 +715,12 @@ export function DiagramFlowCanvas({
 
       // 1. Eliminar relaciones N:M cuyos puentes fueron seleccionados
       for (const relId of bridgeRelationsToDelete) {
-        removeRelationOptimistic(relId);
         try {
-          await diagramOperationQueueRepositoryImpl.enqueue({
-            operationId: crypto.randomUUID(),
+          await createDeleteDiagramRelation({ dispatch: dispatchDiagramOperation })(
             viewerId,
             projectId,
-            kind: "DELETE_RELATION",
-            relationId: relId,
-            payload: {
-              relationId: relId,
-            },
-            createdAt: new Date().toISOString(),
-            attempts: 0,
-            state: "pending",
-          });
+            relId
+          );
         } catch (err) {
           console.error(
             "Error al encolar eliminación de relación puente:",
@@ -766,29 +731,18 @@ export function DiagramFlowCanvas({
 
       // 2. Eliminar clases normales seleccionadas
       if (regularNodesToDelete.length > 0) {
-        const selectedIds = regularNodesToDelete.map((n) => n.id);
-        removeNodesOptimistic(selectedIds);
-
         for (const node of regularNodesToDelete) {
           try {
-            await diagramOperationQueueRepositoryImpl.enqueue({
-              operationId: crypto.randomUUID(),
+            await createDeleteDiagramClass({ dispatch: dispatchDiagramOperation })(
               viewerId,
               projectId,
-              kind: "DELETE",
-              classId: node.id,
-              payload: {},
-              createdAt: new Date().toISOString(),
-              attempts: 0,
-              state: "pending",
-            });
+              node.id
+            );
           } catch (err) {
             console.error("Error al encolar eliminación de clase:", err);
           }
         }
       }
-
-      window.dispatchEvent(new CustomEvent("diagram:process-queue"));
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -798,9 +752,7 @@ export function DiagramFlowCanvas({
     projectId,
     viewerId,
     activeTool,
-    removeNodesOptimistic,
-    removeRelationOptimistic,
-    removeAttributeOptimistic,
+    dispatchDiagramOperation,
   ]);
 
   return (

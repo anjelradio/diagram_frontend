@@ -1,11 +1,13 @@
 import { useState, useCallback } from "react";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
+import { useAppStore } from "@/features/shared/presentation/store/app-store";
 import {
   codeGenerationRepository,
   triggerBrowserDownload,
 } from "../../infrastructure/repositories/http-code-generation.repository";
 import type { SpringBootConfigInput } from "../../domain/entities/code-generation.entity";
 import { CODE_GENERATION_MESSAGES } from "../constants/code-generation.messages";
+import { validateDiagramNames } from "../../domain/services/diagram-name-validator.service";
 
 export function useGenerateBackend(projectId: string) {
   const [isGenerating, setIsGenerating] = useState(false);
@@ -13,6 +15,18 @@ export function useGenerateBackend(projectId: string) {
   const generateSpringBoot = useCallback(
     async (config?: SpringBootConfigInput) => {
       if (isGenerating) return;
+
+      const nodes = useAppStore.getState().nodes;
+      const candidates = nodes.map((node) => ({
+        name: node.data.name,
+        attributes: node.data.attributes ?? [],
+      }));
+
+      const validation = validateDiagramNames(candidates);
+      if (!validation.isValid) {
+        appToast.error(validation.message);
+        return;
+      }
 
       setIsGenerating(true);
       appToast.info(CODE_GENERATION_MESSAGES.loading.generating);

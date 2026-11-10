@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { DiagramRelation } from "../../../../../domain/entities/diagram-relation.entity.ts";
 import {
   convertRelationToEdge,
@@ -263,4 +264,30 @@ describe("DiagramRelationEdge Utils & Mappers", () => {
       assert.equal(shouldRenderRelationName(baseManyToMany.relationType), true);
     });
   });
+
+  describe("RelationNameEditor - Protección contra edición de relaciones reservadas", () => {
+    const editorSource = readFileSync(
+      new URL("./relation-name-editor.tsx", import.meta.url),
+      "utf8"
+    );
+
+    it("comprueba si la relación o sus extremos están reservados por el asistente", () => {
+      assert.match(editorSource, /isComponentReservedByAgent\(relationId, "relation"\)/);
+      assert.match(editorSource, /isComponentReservedByAgent\(relation\.source\.classId, "class"\)/);
+      assert.match(editorSource, /isComponentReservedByAgent\(relation\.target\.classId, "class"\)/);
+      assert.match(editorSource, /isComponentReservedByAgent\(relation\.bridge\.classId, "class"\)/);
+      assert.match(editorSource, /isAgentReserved/);
+    });
+
+    it("cancela edición inline activa cuando se adquiere la reserva del agente", () => {
+      assert.match(editorSource, /if \(isAgentReserved && isEditing\) \{/);
+      assert.match(editorSource, /setIsEditing\(false\)/);
+    });
+
+    it("impide doble clic y rechaza commit si la relación o sus clases están reservadas", () => {
+      assert.match(editorSource, /if \(isEffectiveDisabled\) return/);
+      assert.match(editorSource, /disabled \|\| !canEdit \|\| isAgentReserved/);
+    });
+  });
 });
+

@@ -72,6 +72,11 @@ export const RelationHandles = memo(function RelationHandles({
       draft.phase === "idle" ||
       draft.phase === "source_popover_open"
     ) {
+      const isReserved = useAppStore.getState().isComponentReservedByAgent(classId, "class");
+      if (isReserved) {
+        appToast.error("No se puede iniciar una relación desde una clase reservada por el asistente.");
+        return;
+      }
       openVertexMenu({
         classId,
         handleId,
@@ -90,6 +95,12 @@ export const RelationHandles = memo(function RelationHandles({
         draft.source?.handle === handleId
       ) {
         useAppStore.getState().cancelRelationCreation();
+        return;
+      }
+
+      const isReserved = useAppStore.getState().isComponentReservedByAgent(classId, "class");
+      if (isReserved) {
+        appToast.error("No se puede conectar una clase reservada por el asistente.");
         return;
       }
 

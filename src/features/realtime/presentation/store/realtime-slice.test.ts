@@ -145,38 +145,166 @@ describe("RealtimeSlice", () => {
     const store = setup();
     store.getState().setRealtimeStatus("connected");
     store.getState().setLocalClassLock("c1");
-    store.getState().setAgentLock(true, "act-123");
     store.getState().resetRealtime();
 
     const state = store.getState();
     assert.equal(state.realtimeStatus, "disconnected");
     assert.equal(state.localLockedClassId, null);
-    assert.equal(state.isAgentLocked, false);
-    assert.equal(state.agentActivityId, null);
     assert.deepEqual(state.presence, {});
     assert.deepEqual(state.classLocks, {});
+    assert.deepEqual(state.agentReservations, {});
   });
 
-  it("gestiona el bloqueo global del asistente IA (setAgentLock)", () => {
+  it("gestiona reservas efímeras del agente con promoción, secuencia y liberación selectiva", () => {
     const store = setup();
-    assert.equal(store.getState().isAgentLocked, false);
-    assert.equal(store.getState().agentActivityId, null);
 
-    store.getState().setAgentLock(true, "activity-999");
-    assert.equal(store.getState().isAgentLocked, true);
-    assert.equal(store.getState().agentActivityId, "activity-999");
+    // 1. Snapshot inicial
+    store.getState().setAgentReservations([
+      {
+        projectId: "p1",
+        messageId: "m1",
+        sequence: 1,
+        componentType: "class",
+        componentId: "c1",
+        activityType: "query",
+        attributeId: null,
+      },
+    ]);
+    assert.equal(store.getState().isComponentReservedByAgent("c1", "class"), true);
+    assert.equal(
+      store.getState().getEffectiveComponentReservation("c1", "class").activityType,
+      "query"
+    );
 
-    store.getState().setAgentLock(false);
-    assert.equal(store.getState().isAgentLocked, false);
-    assert.equal(store.getState().agentActivityId, null);
+    // 2. Promoción a edit
+    store.getState().upsertAgentReservation({
+      projectId: "p1",
+      messageId: "m1",
+      sequence: 2,
+      componentType: "class",
+      componentId: "c1",
+      activityType: "edit",
+      attributeId: "a1",
+    });
+    const eff = store.getState().getEffectiveComponentReservation("c1", "class");
+    assert.equal(eff.activityType, "edit");
+    assert.equal(eff.attributeId, "a1");
+
+    // 3. Evento tardío / menor secuencia no sobreescribe
+    store.getState().upsertAgentReservation({
+      projectId: "p1",
+      messageId: "m1",
+      sequence: 1,
+      componentType: "class",
+      componentId: "c1",
+      activityType: "query",
+      attributeId: null,
+    });
+    assert.equal(
+      store.getState().getEffectiveComponentReservation("c1", "class").activityType,
+      "edit"
+    );
+
+    // 4. Segundo mensaje reserva c1
+    store.getState().upsertAgentReservation({
+      projectId: "p1",
+      messageId: "m2",
+      sequence: 1,
+      componentType: "class",
+      componentId: "c1",
+      activityType: "query",
+      attributeId: null,
+    });
+    // Liberar m1 deja a c1 reservada por m2
+    store.getState().releaseAgentReservationsByMessage("m1");
+    assert.equal(store.getState().isComponentReservedByAgent("c1", "class"), true);
+    assert.equal(
+      store.getState().getEffectiveComponentReservation("c1", "class").activityType,
+      "query"
+    );
   });
 
-  it("libera únicamente el lock cuyo activityId coincide", () => {
+  it("evalúa canEditDiagramComponent combinando permisos, locks manuales y reservas", () => {
     const store = setup();
-    store.getState().acquireAgentLock({ activityId: "act-current", userId: "agent-1" });
-    store.getState().releaseAgentLock("act-old");
-    assert.equal(store.getState().agentActivityId, "act-current");
-    store.getState().releaseAgentLock("act-current");
-    assert.equal(store.getState().agentActivityId, null);
+
+    // Sin permisos en el proyecto
+    assert.equal(
+      store.getState().canEditDiagramComponent("c1", "class", "u1", false).allowed,
+      false
+    );
+
+    // Con permisos y sin bloqueos
+    assert.equal(
+      store.getState().canEditDiagramComponent("c1", "class", "u1", true).allowed,
+      true
+    );
+
+    // Bloqueo manual por otro usuario
+    store.getState().setClassLock({
+      classId: "c1",
+      userId: "u2",
+      userName: "Carlos",
+      lockedAt: 1000,
+      expiresAt: 61000,
+      color: "#a78bfa",
+    });
+    const lockedDecision = store
+      .getState()
+      .canEditDiagramComponent("c1", "class", "u1", true);
+    assert.equal(lockedDecision.allowed, false);
+    assert.match(lockedDecision.reason ?? "", /Bloqueado por Carlos/);
+
+    // Bloqueado para el propio u2 está permitido
+    assert.equal(
+      store.getState().canEditDiagramComponent("c1", "class", "u2", true).allowed,
+      true
+    );
+
+    // Reserva del asistente en modo edit
+    store.getState().upsertAgentReservation({
+      projectId: "p1",
+      messageId: "m1",
+      sequence: 1,
+      componentType: "class",
+      componentId: "c2",
+      activityType: "edit",
+      attributeId: null,
+    });
+    const agentDecision = store
+      .getState()
+      .canEditDiagramComponent("c2", "class", "u1", true);
+    assert.equal(agentDecision.allowed, false);
+    assert.match(agentDecision.reason ?? "", /El asistente está modificando/);
+  });
+
+  it("proporciona referencias estables de getEffectiveComponentReservation y canEditDiagramComponent para getSnapshot", () => {
+    const store = setup();
+
+    // 1. Componente sin reservas devuelve la misma referencia idéntica (Object.is)
+    const ref1 = store.getState().getEffectiveComponentReservation("c1", "class");
+    const ref2 = store.getState().getEffectiveComponentReservation("c1", "class");
+    assert.equal(ref1, ref2);
+    assert.equal(ref1.isReserved, false);
+
+    // 2. Componente con reserva devuelve la misma referencia idéntica entre llamadas
+    store.getState().upsertAgentReservation({
+      projectId: "p1",
+      messageId: "m1",
+      sequence: 1,
+      componentType: "class",
+      componentId: "c1",
+      activityType: "query",
+      attributeId: null,
+    });
+    const reservedRef1 = store.getState().getEffectiveComponentReservation("c1", "class");
+    const reservedRef2 = store.getState().getEffectiveComponentReservation("c1", "class");
+    assert.equal(reservedRef1, reservedRef2);
+    assert.equal(reservedRef1.isReserved, true);
+
+    // 3. canEditDiagramComponent devuelve referencias estables congeladas
+    const dec1 = store.getState().canEditDiagramComponent("c2", "class", "u1", true);
+    const dec2 = store.getState().canEditDiagramComponent("c2", "class", "u1", true);
+    assert.equal(dec1, dec2);
+    assert.equal(dec1.allowed, true);
   });
 });

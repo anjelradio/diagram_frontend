@@ -54,7 +54,7 @@ export function projectDiagramOperation(
     bridge: r.bridge ? { ...r.bridge } : null,
   }));
 
-  if (op.kind === "CREATE" || op.kind === "CREATE_CLASS") {
+  if (op.kind === "CREATE_CLASS") {
     const p = op.payload as CreateClassPayload;
     const pk = p.primaryAttribute || {
       id: crypto.randomUUID(),
@@ -81,20 +81,20 @@ export function projectDiagramOperation(
       positionY: p.positionY,
       attributes: [pkAttr],
     });
-  } else if (op.kind === "RENAME" || op.kind === "RENAME_CLASS") {
+  } else if (op.kind === "RENAME_CLASS") {
     const p = op.payload as RenameClassPayload;
     const targetClass = classes.find((c) => c.id === op.classId);
     if (targetClass) {
       targetClass.name = p.name;
     }
-  } else if (op.kind === "MOVE" || op.kind === "MOVE_CLASS") {
+  } else if (op.kind === "MOVE_CLASS") {
     const p = op.payload as MoveClassPayload;
     const targetClass = classes.find((c) => c.id === op.classId);
     if (targetClass) {
       targetClass.positionX = p.positionX;
       targetClass.positionY = p.positionY;
     }
-  } else if (op.kind === "DELETE" || op.kind === "DELETE_CLASS") {
+  } else if (op.kind === "DELETE_CLASS") {
     const classId = op.classId;
     const classIdx = classes.findIndex((c) => c.id === classId);
     if (classIdx !== -1) {

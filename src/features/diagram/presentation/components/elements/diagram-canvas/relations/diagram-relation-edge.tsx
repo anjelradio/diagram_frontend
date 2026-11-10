@@ -19,6 +19,7 @@ import {
 import { getSelfLoopPath } from "./relation-path-utils";
 import { RelationNameEditor } from "./relation-name-editor";
 import { getHandlePoint } from "./relation-handle-geometry";
+import { AgentReservationIndicator } from "@/features/realtime/presentation/components/elements/agent-reservation-indicator";
 
 function getCardinalityOffset(pos: Position) {
   switch (pos) {
@@ -53,6 +54,9 @@ export const DiagramRelationEdge = memo(function DiagramRelationEdge({
 }: EdgeProps) {
   const relation = (data as DiagramRelationEdgeData | undefined)?.relation;
   const setSelectedRelationId = useAppStore((s) => s.setSelectedRelationId);
+  const effectiveReservation = useAppStore((s) =>
+    relation ? s.getEffectiveComponentReservation(relation.id, "relation") : null
+  );
 
   const isSelf = relation ? relation.source.classId === relation.target.classId : false;
 
@@ -143,8 +147,14 @@ export const DiagramRelationEdge = memo(function DiagramRelationEdge({
         path={edgePath}
         style={{
           ...style,
-          stroke: visuals.stroke,
-          strokeWidth: visuals.strokeWidth,
+          stroke: isSelected
+            ? visuals.stroke
+            : effectiveReservation?.activityType === "edit"
+              ? "#a855f7"
+              : effectiveReservation?.activityType === "query"
+                ? "#38bdf8"
+                : visuals.stroke,
+          strokeWidth: effectiveReservation ? visuals.strokeWidth + 0.5 : visuals.strokeWidth,
           strokeDasharray: visuals.strokeDasharray,
           strokeLinecap: "round",
           strokeLinejoin: "round",
@@ -155,6 +165,19 @@ export const DiagramRelationEdge = memo(function DiagramRelationEdge({
       />
 
       <EdgeLabelRenderer>
+        {/* Señal visual de reserva del agente */}
+        {effectiveReservation?.isReserved && effectiveReservation.activityType && (
+          <div
+            style={{
+              position: "absolute",
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY - 24}px)`,
+              pointerEvents: "none",
+            }}
+          >
+            <AgentReservationIndicator activityType={effectiveReservation.activityType} />
+          </div>
+        )}
+
         {/* Cardinalidad en origen */}
         {cardinalities.source && (
           <div

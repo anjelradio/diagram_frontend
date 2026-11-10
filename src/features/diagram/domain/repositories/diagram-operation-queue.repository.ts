@@ -1,6 +1,6 @@
 import type {
   DiagramOperation,
-  DiagramOperationInput,
+  DiagramOperationQueueInput,
 } from "../entities/diagram-operation.entity";
 
 /**
@@ -11,7 +11,7 @@ export interface DiagramOperationQueueRepository {
   /**
    * Encola una nueva operación asignándole la siguiente secuencia ascendente de forma transaccional.
    */
-  enqueue(operation: DiagramOperationInput): Promise<DiagramOperation>;
+  enqueue(operation: DiagramOperationQueueInput): Promise<DiagramOperation>;
 
   /**
    * Obtiene la siguiente operación pendiente (menor secuencia) para procesar, o null si la cola está vacía.

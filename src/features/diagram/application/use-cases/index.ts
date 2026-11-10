@@ -1,0 +1,13 @@
+export { createDispatchDiagramOperation } from "./dispatch-diagram-operation";
+export { createExecuteDiagramOperation } from "./execute-diagram-operation";
+export { createCreateDiagramRelation } from "./create-diagram-relation";
+export { createRenameDiagramRelation } from "./rename-diagram-relation";
+export { createDeleteDiagramRelation } from "./delete-diagram-relation";
+export { createCreateDiagramClass } from "./create-diagram-class";
+export { createRenameDiagramClass } from "./rename-diagram-class";
+export { createMoveDiagramClass } from "./move-diagram-class";
+export { createDeleteDiagramClass } from "./delete-diagram-class";
+export { createCreateDiagramAttribute } from "./create-diagram-attribute";
+export { createUpdateDiagramAttribute } from "./update-diagram-attribute";
+export { createRepositionDiagramAttribute } from "./reposition-diagram-attribute";
+export { createDeleteDiagramAttribute } from "./delete-diagram-attribute";

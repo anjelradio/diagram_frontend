@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useAppStore } from "@/features/shared/presentation/store/app-store";
 import {
   SOURCE_VERTEX_OPTIONS,
   TARGET_CARDINALITY_OPTIONS,
@@ -227,6 +228,15 @@ export function VertexRelationPopover({
       window.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [onClose]);
+
+  const isAnchorReserved = useAppStore((s) =>
+    s.isComponentReservedByAgent(anchor.classId, "class")
+  );
+  useEffect(() => {
+    if (isAnchorReserved) {
+      onClose();
+    }
+  }, [isAnchorReserved, onClose]);
 
   const options =
     step === "source" ? SOURCE_VERTEX_OPTIONS : TARGET_CARDINALITY_OPTIONS;

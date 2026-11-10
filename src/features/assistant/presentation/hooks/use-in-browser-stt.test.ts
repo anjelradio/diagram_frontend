@@ -51,3 +51,8 @@ test("useInBrowserStt cancelSession desvincula onstop, limpia chunks y restablec
   assert.match(source, /audioChunksRef\.current = \[\]/);
   assert.match(source, /setState\(\{ status: "idle" \}\)/);
 });
+
+test("useInBrowserStt sincroniza onTranscribeSuccess en ref para evitar cierres obsoletos", () => {
+  assert.match(source, /onTranscribeSuccessRef/);
+  assert.match(source, /onTranscribeSuccessRef\.current\(result\.text\)/);
+});

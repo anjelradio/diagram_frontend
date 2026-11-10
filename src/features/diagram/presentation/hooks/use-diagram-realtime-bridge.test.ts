@@ -1,9 +1,32 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { DiagramSnapshot } from "../../domain/entities/diagram-class.entity.ts";
 import type { DiagramOperation } from "../../domain/entities/diagram-operation.entity.ts";
+import { shouldApplyRealtimeMutation } from "./realtime-mutation-policy.ts";
 
 describe("useDiagramRealtimeBridge - Reconciliación de Snapshot y Cola", () => {
+  it("ignora mutaciones del viewer emisor y conserva mutaciones de colaboradores", () => {
+    assert.equal(shouldApplyRealtimeMutation("viewer-1", "viewer-1"), false);
+    assert.equal(shouldApplyRealtimeMutation("viewer-2", "viewer-1"), true);
+    assert.equal(shouldApplyRealtimeMutation("assistant", "viewer-1"), true);
+  });
+
+  it("aplica cada mutación confirmada del agente incrementalmente y reserva el snapshot para reconciliar", () => {
+    const acceptedMutationTypes = [
+      "CREATE_CLASS",
+      "RENAME_CLASS",
+      "CREATE_ATTRIBUTE",
+      "UPDATE_ATTRIBUTE",
+      "DELETE_ATTRIBUTE",
+      "CREATE_RELATION",
+      "DELETE_RELATION",
+    ];
+    assert.ok(acceptedMutationTypes.every((type) => shouldApplyRealtimeMutation("assistant", "viewer-1")));
+    assert.match(readFileSync(new URL("./use-diagram-realtime-bridge.ts", import.meta.url), "utf8"), /store\.applyRemoteMutation\(/);
+    assert.match(readFileSync(new URL("./use-diagram-realtime-bridge.ts", import.meta.url), "utf8"), /agentMessageFinished[\s\S]*?refreshSnapshot/);
+  });
+
   it("reconcilia snapshot del servidor aplicando operaciones locales pendientes de IndexedDB en orden", () => {
     // Snapshot del servidor
     const serverSnapshot: DiagramSnapshot = {
@@ -35,7 +58,7 @@ describe("useDiagramRealtimeBridge - Reconciliación de Snapshot y Cola", () => 
         viewerId: "viewer-1",
         projectId: "proj-1",
         sequence: 1,
-        kind: "RENAME",
+        kind: "RENAME_CLASS",
         classId: "c1",
         payload: { name: "PersonaModificada" },
         createdAt: "2026-09-14T10:00:00Z",
@@ -65,7 +88,7 @@ describe("useDiagramRealtimeBridge - Reconciliación de Snapshot y Cola", () => 
       const current = { ...cls, attributes: [...cls.attributes] };
       for (const op of pendingOperations) {
         if (op.classId === current.id) {
-          if (op.kind === "RENAME") {
+          if (op.kind === "RENAME_CLASS") {
             current.name = (op.payload as { name: string }).name;
           } else if (op.kind === "CREATE_ATTRIBUTE") {
             const payload = op.payload as { id: string; name: string; position: number };
@@ -124,15 +147,15 @@ describe("useDiagramRealtimeBridge - Reconciliación de Snapshot y Cola", () => 
     assert.equal(appliedSnapshot!.classes[0].name, "Nuevo");
   });
 
-  it("reconoce agentFinished y gatilla refresco autoritativo de snapshot", () => {
+  it("reconoce el mensaje terminal del agente y gatilla refresco autoritativo de snapshot", () => {
     let refreshTriggered = false;
     const handleMessage = (msg: { type: string }) => {
-      if (msg.type === "agentFinished") {
+      if (msg.type === "agentMessageFinished") {
         refreshTriggered = true;
       }
     };
 
-    handleMessage({ type: "agentFinished" });
+    handleMessage({ type: "agentMessageFinished" });
     assert.equal(refreshTriggered, true);
   });
 

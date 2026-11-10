@@ -63,4 +63,25 @@ describe("ProjectCanvasToolbar - Activación directa de herramienta de relacione
       "La tecla R debe conmutar activeTool directamente sin abrir paneles laterales"
     );
   });
+
+  it("elimina las herramientas de insertar texto e imagen en próximamente", () => {
+    assert.doesNotMatch(
+      toolbarSource,
+      /Insertar texto/,
+      "No debe contener la herramienta de insertar texto"
+    );
+    assert.doesNotMatch(
+      toolbarSource,
+      /Insertar imagen/,
+      "No debe contener la herramienta de insertar imagen"
+    );
+  });
+
+  it("elimina los controles de deshacer, rehacer y porcentaje de zoom del lienzo", () => {
+    assert.doesNotMatch(
+      canvasViewSource,
+      /ProjectCanvasBottomControls/,
+      "ProjectCanvasView no debe importar ni renderizar ProjectCanvasBottomControls"
+    );
+  });
 });
