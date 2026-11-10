@@ -4,6 +4,8 @@ import { projectRepositoryImpl } from "@/features/projects/infrastructure/reposi
 import { ProjectsView } from "@/features/projects/presentation/components/elements/projects-list/projects-view";
 import { ManualFloatingHelpButton } from "@/features/manual/presentation/components/elements/manual-floating-help-button";
 
+export const dynamic = "force-dynamic";
+
 /**
  * Controlador para la página principal del catálogo de proyectos (/projects).
  * Proporciona el fondo y encabezado exclusivos del listado, obtiene los proyectos en el servidor

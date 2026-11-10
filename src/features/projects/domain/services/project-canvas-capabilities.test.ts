@@ -17,6 +17,7 @@ describe("deriveProjectCanvasCapabilities - Matriz pura de capacidades", () => {
     assert.equal(caps.canManageMembers, true);
     assert.equal(caps.canViewHistoricalMembers, true);
     assert.equal(caps.canDuplicateOrDeleteProject, true);
+    assert.equal(caps.canManageIntegrations, true);
   });
 
   it("otorga edición de diagrama y exportación pero no administración al rol EDITOR", () => {
@@ -34,6 +35,7 @@ describe("deriveProjectCanvasCapabilities - Matriz pura de capacidades", () => {
     assert.equal(caps.canManageMembers, false);
     assert.equal(caps.canViewHistoricalMembers, false);
     assert.equal(caps.canDuplicateOrDeleteProject, false);
+    assert.equal(caps.canManageIntegrations, false);
   });
 
   it("otorga únicamente visualización, pan y zoom al rol READER", () => {
@@ -53,5 +55,6 @@ describe("deriveProjectCanvasCapabilities - Matriz pura de capacidades", () => {
     assert.equal(caps.canManageMembers, false);
     assert.equal(caps.canViewHistoricalMembers, false);
     assert.equal(caps.canDuplicateOrDeleteProject, false);
+    assert.equal(caps.canManageIntegrations, false);
   });
 });

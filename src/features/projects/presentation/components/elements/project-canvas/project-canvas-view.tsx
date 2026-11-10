@@ -11,6 +11,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useGenerateBackend } from "@/features/code-generation/presentation/hooks/use-generate-backend";
 import { useExportProject } from "@/features/projects/presentation/hooks/use-export-project";
+import { useProjectThumbnailCapture } from "@/features/projects/presentation/hooks/use-project-thumbnail-capture";
 import { CODE_GENERATION_MESSAGES } from "@/features/code-generation/presentation/constants/code-generation.messages";
 import {
   ProjectAccessRole,
@@ -27,7 +28,6 @@ import { DiagramCanvasView } from "@/features/diagram/presentation/components/el
 import { DiagramSyncBadge } from "@/features/diagram/presentation/components/elements/diagram-canvas/diagram-sync-badge";
 import { RelationGuidancePill } from "@/features/diagram/presentation/components/elements/diagram-canvas/relations/relation-guidance-pill";
 import { ProjectActionsMenu } from "./project-actions-menu";
-import { ProjectCommandDialog } from "./project-command-dialog";
 import { ProjectSharePopover } from "@/features/collaboration/presentation/components/elements/project-canvas/project-share-popover";
 import { ProjectMembersPopover } from "@/features/collaboration/presentation/components/elements/project-canvas/project-members-popover";
 import { ProjectInformationPopover } from "./project-information-dialog";
@@ -40,6 +40,7 @@ import type {
 } from "@/features/assistant/domain/entities/agent-activity.entity";
 import { AgentChatWidget } from "@/features/assistant/presentation/components/elements/chat/agent-chat-widget";
 import { AssistantFloatingDock } from "@/features/assistant/presentation/components/elements/dock/assistant-floating-dock";
+import { IntegrationsPopoverButton } from "@/features/integrations/presentation/components/integrations-popover-button";
 import { AgentAuroraOverlay } from "@/features/assistant/presentation/components/elements/agent-aurora-overlay";
 import { useAgentChat } from "@/features/assistant/presentation/hooks/use-agent-chat";
 import { useInBrowserStt } from "@/features/assistant/presentation/hooks/use-in-browser-stt";
@@ -164,9 +165,14 @@ export function ProjectCanvasView({
   const setActiveStoreTool = useAppStore((s) => s.setActiveTool);
   const cancelRelationCreation = useAppStore((s) => s.cancelRelationCreation);
 
+  const diagramNodes = useAppStore((s) => s.nodes);
   const { generateSpringBoot, isGenerating: isGeneratingBackend } =
     useGenerateBackend(currentProject.id);
   const { exportProject, isExporting } = useExportProject(currentProject.id);
+  const { captureAndNavigate } = useProjectThumbnailCapture({
+    projectId: currentProject.id,
+    hasClasses: diagramNodes.length > 0,
+  });
 
   const handleSelectTool = useCallback(
     (tool: CanvasTool) => {
@@ -179,7 +185,6 @@ export function ProjectCanvasView({
   );
 
   // Estados de modales y diálogos
-  const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
 
@@ -200,13 +205,6 @@ export function ProjectCanvasView({
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // ⌘K o Ctrl+K para alternar el menú de comandos
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setIsCommandOpen((prev) => !prev);
-        return;
-      }
-
       // Si el foco está en un campo o diálogo, omitir los atajos de herramientas
       if (isEditable(e.target)) return;
 
@@ -231,8 +229,24 @@ export function ProjectCanvasView({
         return;
       }
 
-      // V o B: Selección de herramienta Puntero
-      if (e.key.toLowerCase() === "v" || e.key.toLowerCase() === "b") {
+      // V: Selección de herramienta Crear clase UML (condicionada a canEdit)
+      if (e.key.toLowerCase() === "v") {
+        if (canEdit) {
+          handleSelectTool("create-class");
+        }
+        return;
+      }
+
+      // B: Alternar herramienta de relaciones UML (condicionada a canEdit)
+      if (e.key.toLowerCase() === "b") {
+        if (canEdit) {
+          handleSelectTool(activeTool === "relation" ? "cursor" : "relation");
+        }
+        return;
+      }
+
+      // N: Selección de herramienta Puntero / Cursor
+      if (e.key.toLowerCase() === "n") {
         if (canEdit) {
           handleSelectTool("cursor");
         }
@@ -243,28 +257,6 @@ export function ProjectCanvasView({
       if (e.key.toLowerCase() === "m") {
         if (canEdit) {
           handleSelectTool("select");
-        }
-        return;
-      }
-
-      // H: Selección de herramienta Mano persistente
-      if (e.key.toLowerCase() === "h") {
-        handleSelectTool("hand");
-        return;
-      }
-
-      // C: Selección de herramienta Crear clase UML (condicionada a canEdit)
-      if (e.key.toLowerCase() === "c") {
-        if (canEdit) {
-          handleSelectTool("create-class");
-        }
-        return;
-      }
-
-      // R: Alternar herramienta de relaciones UML (condicionada a canEdit)
-      if (e.key.toLowerCase() === "r") {
-        if (canEdit) {
-          handleSelectTool(activeTool === "relation" ? "cursor" : "relation");
         }
         return;
       }
@@ -340,13 +332,13 @@ export function ProjectCanvasView({
           <ProjectActionsMenu
             capabilities={capabilities}
             isOwner={currentProject.accessRole === ProjectAccessRole.OWNER}
-            onOpenCommands={() => setIsCommandOpen(true)}
             onOpenDelete={
               capabilities.canDuplicateOrDeleteProject
                 ? () => setIsDeleteOpen(true)
                 : undefined
             }
             onExport={exportProject}
+            onBackToProjects={() => captureAndNavigate("/projects")}
           />
 
           {capabilities.canEditProjectDetails ? (
@@ -435,11 +427,20 @@ export function ProjectCanvasView({
             <ProjectSharePopover projectId={currentProject.id} />
           )}
 
-          <ProjectMembersPopover
-            projectId={currentProject.id}
-            initialMembers={initialMembers}
-            capabilities={capabilities}
-          />
+          {/* Colaboradores y debajo botón exclusivo de Integraciones */}
+          <div className="relative flex flex-col items-end">
+            <ProjectMembersPopover
+              projectId={currentProject.id}
+              initialMembers={initialMembers}
+              capabilities={capabilities}
+            />
+
+            {capabilities.canManageIntegrations && (
+              <div className="absolute top-full right-0 mt-2.5 pointer-events-auto">
+                <IntegrationsPopoverButton projectId={currentProject.id} />
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -509,16 +510,9 @@ export function ProjectCanvasView({
           </AnimatePresence>
         </div>
 
-        {/* Derecha: Espacio reservado para balance de 3 columnas */}
-        <div className="flex-1 flex justify-end" />
+        {/* Derecha: Espaciador reservado para balance de 3 columnas */}
+        <div className="flex-1 flex justify-end pointer-events-none" />
       </footer>
-
-      {/* Diálogo de atajos de teclado (⌘K) */}
-      <ProjectCommandDialog
-        open={isCommandOpen}
-        onOpenChange={setIsCommandOpen}
-        capabilities={capabilities}
-      />
 
       {/* Diálogos exclusivos del propietario */}
       {capabilities.canDuplicateOrDeleteProject && (

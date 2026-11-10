@@ -159,3 +159,53 @@ describe("ProjectRepository - importProject and exportProject", () => {
     assert.equal(cfg.withAuth, true);
   });
 });
+
+describe("ProjectRepository - uploadThumbnail", () => {
+  it("envía FormData a /projects/{id}/thumbnail y mapea la respuesta", async () => {
+    let capturedConfig: unknown = null;
+    const fakeBlob = new Blob(["fake-image-bytes"], { type: "image/jpeg" });
+
+    const repo = createProjectRepository(
+      undefined,
+      undefined,
+      async <TParsed, TResult>(cfg: {
+        url: string;
+        method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+        body: FormData;
+        withAuth?: boolean;
+        responseSchema: { parse: (val: unknown) => TParsed };
+        mapData: (data: TParsed) => TResult;
+      }) => {
+        capturedConfig = cfg;
+        const rawData = {
+          project_id: "proj-123",
+          thumbnail_url: "https://res.cloudinary.com/demo/image/upload/diagrama/test.jpg",
+          thumbnail_updated_at: "2026-11-10T12:00:00Z",
+          updated: true,
+        };
+        const parsed = cfg.responseSchema.parse(rawData);
+        const mapped = cfg.mapData(parsed);
+        return { ok: true, data: mapped };
+      }
+    );
+
+    const res = await repo.uploadThumbnail("proj-123", fakeBlob);
+    assert.equal(res.ok, true);
+    if (res.ok) {
+      assert.equal(res.data.projectId, "proj-123");
+      assert.equal(res.data.thumbnailUrl, "https://res.cloudinary.com/demo/image/upload/diagrama/test.jpg");
+      assert.equal(res.data.updated, true);
+    }
+
+    const cfg = capturedConfig as {
+      url: string;
+      method: string;
+      withAuth: boolean;
+      body: FormData;
+    };
+    assert.ok(cfg.url.includes("/projects/proj-123/thumbnail"));
+    assert.equal(cfg.method, "POST");
+    assert.equal(cfg.withAuth, true);
+    assert.ok(cfg.body.get("file") instanceof Blob);
+  });
+});

@@ -3,6 +3,7 @@ import type {
   ProjectCreated,
   ProjectDetail,
   ProjectList,
+  ProjectThumbnailUpdated,
   ProjectUpdate,
 } from "../../domain/entities/project.entity";
 import type {
@@ -10,6 +11,7 @@ import type {
   ProjectDetailResponse,
   ProjectItemResponse,
   ProjectListResponse,
+  ProjectThumbnailResponse,
   UpdateProjectRequest,
 } from "../schemas/project.schemas";
 
@@ -24,7 +26,9 @@ export function mapProjectItemToEntity(raw: ProjectItemResponse): Project {
     name: raw.name,
     description: raw.description,
     thumbnailUrl: raw.thumbnail_url,
+    thumbnailUpdatedAt: raw.thumbnail_updated_at ?? null,
     isOwner: raw.is_owner,
+    modifiedDate: raw.modified_date,
   };
 }
 
@@ -34,7 +38,19 @@ export function mapProjectDetailToEntity(raw: ProjectDetailResponse): ProjectDet
     name: raw.name,
     description: raw.description,
     thumbnailUrl: raw.thumbnail_url,
+    thumbnailUpdatedAt: raw.thumbnail_updated_at ?? null,
     accessRole: raw.access_role,
+  };
+}
+
+export function mapProjectThumbnailToEntity(
+  raw: ProjectThumbnailResponse
+): ProjectThumbnailUpdated {
+  return {
+    projectId: raw.project_id,
+    thumbnailUrl: raw.thumbnail_url,
+    thumbnailUpdatedAt: raw.thumbnail_updated_at ?? null,
+    updated: raw.updated,
   };
 }
 

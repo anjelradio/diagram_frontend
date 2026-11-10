@@ -8,7 +8,9 @@ export type Project = {
   name: string;
   description: string | null;
   thumbnailUrl: string | null;
+  thumbnailUpdatedAt?: string | null;
   isOwner: boolean;
+  modifiedDate: string;
 };
 
 export type ProjectUpdate = Partial<Pick<Project, "name" | "description">>;
@@ -42,7 +44,15 @@ export type ProjectDetail = {
   name: string;
   description: string | null;
   thumbnailUrl: string | null;
+  thumbnailUpdatedAt?: string | null;
   accessRole: ProjectAccessRole;
+};
+
+export type ProjectThumbnailUpdated = {
+  projectId: string;
+  thumbnailUrl: string | null;
+  thumbnailUpdatedAt: string | null;
+  updated: boolean;
 };
 
 export type ProjectCanvasCapabilities = {
@@ -56,5 +66,6 @@ export type ProjectCanvasCapabilities = {
   canManageMembers: boolean;
   canViewHistoricalMembers: boolean;
   canDuplicateOrDeleteProject: boolean;
+  canManageIntegrations: boolean;
 };
 

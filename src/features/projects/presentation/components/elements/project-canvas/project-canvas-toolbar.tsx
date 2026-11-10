@@ -57,21 +57,21 @@ export function ProjectCanvasToolbar({
       {/* Barra vertical de herramientas (Pill) */}
       <aside aria-label="Herramientas del lienzo">
         <div className="bg-[#191a1d] border border-white/10 shadow-xl rounded-full p-1.5 flex flex-col items-center gap-1.5 flex-shrink-0">
-          {/* Nueva Clase UML (Creación activa para editores) */}
+          {/* Nueva Clase UML (Atajo: V) */}
           {canEdit && (
             <button
               type="button"
               onClick={() => onSelectTool("create-class")}
               className={getButtonClass(isCreateClassActive)}
-              title="Nueva Clase UML (+)"
-              aria-label="Nueva Clase UML (Herramienta +)"
+              title="Nueva Clase UML (V)"
+              aria-label="Nueva Clase UML (Atajo: V)"
               aria-pressed={isCreateClassActive}
             >
               <SquarePlus className="w-4 h-4" />
             </button>
           )}
 
-          {/* Relaciones UML */}
+          {/* Relaciones UML (Atajo: B) */}
           {canEdit && (
             <button
               type="button"
@@ -80,8 +80,8 @@ export function ProjectCanvasToolbar({
                 onSelectTool(activeTool === "relation" ? "cursor" : "relation")
               }
               className={getButtonClass(isRelationActive)}
-              title="Relaciones UML (R)"
-              aria-label="Relaciones UML (R)"
+              title="Relaciones UML (B)"
+              aria-label="Relaciones UML (Atajo: B)"
               aria-pressed={isRelationActive}
             >
               <Network className="w-4 h-4" />
@@ -92,13 +92,13 @@ export function ProjectCanvasToolbar({
         {/* Separador */}
         <div className="w-5 h-[1px] bg-white/15 my-0.5 rounded-full" />
 
-        {/* Herramienta 1: Puntero / Cursor (V) */}
+        {/* Herramienta 1: Puntero / Cursor (N) */}
         <button
           type="button"
           onClick={() => onSelectTool("cursor")}
           className={getButtonClass(isCursorActive)}
-          title="Seleccionar / Puntero (V)"
-          aria-label="Seleccionar / Puntero (Atajo: V)"
+          title="Seleccionar / Puntero (N)"
+          aria-label="Seleccionar / Puntero (Atajo: N)"
           aria-pressed={isCursorActive}
         >
           <MousePointer2 className="w-4 h-4" />

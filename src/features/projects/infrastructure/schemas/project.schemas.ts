@@ -10,7 +10,9 @@ export const projectItemResponseSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   thumbnail_url: z.string().nullable(),
+  thumbnail_updated_at: z.string().nullable().optional(),
   is_owner: z.boolean(),
+  modified_date: z.string(),
 });
 
 export const projectListResponseSchema = z.object({
@@ -24,7 +26,15 @@ export const projectDetailResponseSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   thumbnail_url: z.string().nullable(),
+  thumbnail_updated_at: z.string().nullable().optional(),
   access_role: projectAccessRoleSchema,
+});
+
+export const projectThumbnailResponseSchema = z.object({
+  project_id: z.string(),
+  thumbnail_url: z.string().nullable(),
+  thumbnail_updated_at: z.string().nullable().optional(),
+  updated: z.boolean(),
 });
 
 export const projectCreatedResponseSchema = z.object({
@@ -55,6 +65,7 @@ export type ProjectItemResponse = z.infer<typeof projectItemResponseSchema>;
 export type ProjectListResponse = z.infer<typeof projectListResponseSchema>;
 export type ProjectAccessRoleResponse = z.infer<typeof projectAccessRoleSchema>;
 export type ProjectDetailResponse = z.infer<typeof projectDetailResponseSchema>;
+export type ProjectThumbnailResponse = z.infer<typeof projectThumbnailResponseSchema>;
 export type ProjectCreatedResponse = z.infer<typeof projectCreatedResponseSchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectInputSchema>;
 export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;

@@ -51,16 +51,54 @@ describe("ProjectCanvasToolbar - Activación directa de herramienta de relacione
     );
   });
 
-  it("conmuta la herramienta de relaciones directamente al presionar la tecla R en el lienzo", () => {
+  it("conmuta la herramienta de relaciones directamente al presionar la tecla B en el lienzo", () => {
     assert.match(
       canvasViewSource,
-      /e\.key\.toLowerCase\(\) === "r"/,
-      "Debe existir el manejador para la tecla R"
+      /e\.key\.toLowerCase\(\) === "b"/,
+      "Debe existir el manejador para la tecla B"
     );
     assert.match(
       canvasViewSource,
       /handleSelectTool\(\s*activeTool === "relation" \? "cursor" : "relation"\s*\)/,
-      "La tecla R debe conmutar activeTool directamente sin abrir paneles laterales"
+      "La tecla B debe conmutar activeTool directamente sin abrir paneles laterales"
+    );
+  });
+
+  it("asigna los atajos ergonómicos consecutivos V, B, N, M y Espacio", () => {
+    assert.match(
+      canvasViewSource,
+      /e\.key\.toLowerCase\(\) === "v"[\s\S]*?handleSelectTool\("create-class"\)/,
+      "V debe activar la creación de clase UML"
+    );
+    assert.match(
+      canvasViewSource,
+      /e\.key\.toLowerCase\(\) === "n"[\s\S]*?handleSelectTool\("cursor"\)/,
+      "N debe activar el puntero/cursor"
+    );
+    assert.match(
+      canvasViewSource,
+      /e\.key\.toLowerCase\(\) === "m"[\s\S]*?handleSelectTool\("select"\)/,
+      "M debe activar el marco de selección"
+    );
+    assert.match(
+      toolbarSource,
+      /title="Nueva Clase UML \(V\)"/,
+      "Toolbar debe mostrar atajo V para crear clase"
+    );
+    assert.match(
+      toolbarSource,
+      /title="Relaciones UML \(B\)"/,
+      "Toolbar debe mostrar atajo B para relaciones"
+    );
+    assert.match(
+      toolbarSource,
+      /title="Seleccionar \/ Puntero \(N\)"/,
+      "Toolbar debe mostrar atajo N para puntero"
+    );
+    assert.match(
+      toolbarSource,
+      /title="Marco de selección \(M\)"/,
+      "Toolbar debe mostrar atajo M para selección"
     );
   });
 

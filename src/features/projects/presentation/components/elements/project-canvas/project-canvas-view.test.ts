@@ -23,3 +23,11 @@ test("ProjectCanvasView configura instancias independientes de STT para el chat 
 test("ProjectCanvasView activa visualState recording cuando cualquiera de los STT está grabando", () => {
   assert.match(source, /lateralStt\.state\.status === "recording" \|\| dockStt\.state\.status === "recording"/);
 });
+
+test("ProjectCanvasView restringe el botón de integraciones exclusivamente al rol OWNER mediante capabilities.canManageIntegrations", () => {
+  assert.match(source, /capabilities\.canManageIntegrations\s*&&\s*\(\s*<div[^>]*>\s*<IntegrationsPopoverButton/);
+});
+
+test("ProjectCanvasView ubica el botón de integraciones debajo del botón de miembros del proyecto en la cabecera", () => {
+  assert.match(source, /<ProjectMembersPopover[\s\S]*?<IntegrationsPopoverButton/);
+});

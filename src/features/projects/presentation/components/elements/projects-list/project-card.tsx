@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { ProjectListItem } from "../../../../domain/entities/project.entity";
+import { formatProjectLastModified } from "../../../utils/project-date-formatter";
 
 type ProjectCardProps = {
   project: ProjectListItem;
@@ -8,6 +9,7 @@ type ProjectCardProps = {
 
 export function ProjectCard({ project }: ProjectCardProps) {
   const thumbnailSrc = project.thumbnailUrl || "/images/not_thumbnail.webp";
+  const lastModifiedText = formatProjectLastModified(project.modifiedDate);
 
   return (
     <Link
@@ -41,16 +43,21 @@ export function ProjectCard({ project }: ProjectCardProps) {
             </p>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between">
-            <span className="text-[11px] font-mono text-slate-400">
-              Fecha de edición
-            </span>
+          <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between gap-2">
+            <div className="flex flex-col min-w-0">
+              <span className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">
+                Última fecha de modificación
+              </span>
+              <span className="text-[11px] text-slate-300 truncate mt-0.5 font-light" title={lastModifiedText}>
+                {lastModifiedText}
+              </span>
+            </div>
             {!project.isOwner ? (
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/5 text-slate-300 border border-white/10">
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-white/5 text-slate-300 border border-white/10 shrink-0 self-center">
                 Compartido
               </span>
             ) : (
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 shrink-0 self-center">
                 Propietario
               </span>
             )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, FileUp, RefreshCw, Search } from "lucide-react";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
@@ -31,6 +31,11 @@ export function ProjectsView({ projects, errorMessage }: ProjectsViewProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [isImporting, setIsImporting] = useState(false);
 
+  useEffect(() => {
+    // Revalidar el listado de proyectos al montar para reflejar miniaturas recién actualizadas
+    router.refresh();
+  }, [router]);
+
   const ownedCount = useMemo(
     () => projects.filter((p) => p.isOwner).length,
     [projects],
@@ -46,12 +51,18 @@ export function ProjectsView({ projects, errorMessage }: ProjectsViewProps) {
       activeTab === "owned" ? p.isOwner : !p.isOwner,
     );
     const query = searchTerm.trim().toLowerCase();
-    if (!query) return tabItems;
+    const result = !query
+      ? tabItems
+      : tabItems.filter((p) => {
+          const nameMatch = p.name.toLowerCase().includes(query);
+          const descMatch = (p.description ?? "").toLowerCase().includes(query);
+          return nameMatch || descMatch;
+        });
 
-    return tabItems.filter((p) => {
-      const nameMatch = p.name.toLowerCase().includes(query);
-      const descMatch = (p.description ?? "").toLowerCase().includes(query);
-      return nameMatch || descMatch;
+    return [...result].sort((a, b) => {
+      const timeA = a.modifiedDate ? new Date(a.modifiedDate).getTime() : 0;
+      const timeB = b.modifiedDate ? new Date(b.modifiedDate).getTime() : 0;
+      return timeB - timeA;
     });
   }, [projects, activeTab, searchTerm]);
 

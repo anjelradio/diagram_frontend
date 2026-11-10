@@ -8,6 +8,7 @@ import type {
   ProjectCreated,
   ProjectDetail,
   ProjectList,
+  ProjectThumbnailUpdated,
   ProjectUpdate,
 } from "../../domain/entities/project.entity.ts";
 import type { ProjectRepository } from "../../domain/repositories/project.repository.ts";
@@ -15,12 +16,14 @@ import {
   mapProjectCreatedToEntity,
   mapProjectDetailToEntity,
   mapProjectListToEntity,
+  mapProjectThumbnailToEntity,
   mapProjectUpdateToRequest,
 } from "../mappers/project.mapper.ts";
 import {
   projectCreatedResponseSchema,
   projectDetailResponseSchema,
   projectListResponseSchema,
+  projectThumbnailResponseSchema,
 } from "../schemas/project.schemas.ts";
 
 const rawBackendUrl =
@@ -194,6 +197,24 @@ export function createProjectRepository(
         method: "DELETE",
         withAuth: true,
         fallbackMessage: "No se pudo eliminar el proyecto. Intenta de nuevo.",
+      });
+    },
+
+    async uploadThumbnail(
+      projectId: string,
+      imageBlob: Blob
+    ): Promise<ApiResult<ProjectThumbnailUpdated>> {
+      const sendFormData = await getFormDataRequester();
+      const formData = new FormData();
+      formData.append("file", imageBlob, "thumbnail.jpg");
+      return sendFormData({
+        url: `${PROJECTS_URL}/${projectId}/thumbnail`,
+        method: "POST",
+        withAuth: true,
+        body: formData,
+        fallbackMessage: "No se pudo actualizar la miniatura del proyecto.",
+        responseSchema: projectThumbnailResponseSchema,
+        mapData: mapProjectThumbnailToEntity,
       });
     },
   };

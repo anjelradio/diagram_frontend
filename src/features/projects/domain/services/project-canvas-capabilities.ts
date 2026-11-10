@@ -27,6 +27,7 @@ export function deriveProjectCanvasCapabilities(
         canManageMembers: true,
         canViewHistoricalMembers: true,
         canDuplicateOrDeleteProject: true,
+        canManageIntegrations: true,
       };
 
     case ProjectAccessRole.EDITOR:
@@ -41,6 +42,7 @@ export function deriveProjectCanvasCapabilities(
         canManageMembers: false,
         canViewHistoricalMembers: false,
         canDuplicateOrDeleteProject: false,
+        canManageIntegrations: false,
       };
 
     case ProjectAccessRole.READER:
@@ -55,6 +57,7 @@ export function deriveProjectCanvasCapabilities(
         canManageMembers: false,
         canViewHistoricalMembers: false,
         canDuplicateOrDeleteProject: false,
+        canManageIntegrations: false,
       };
   }
 }

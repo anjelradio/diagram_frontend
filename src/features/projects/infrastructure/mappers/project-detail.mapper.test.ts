@@ -2,9 +2,11 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   projectDetailResponseSchema,
+  projectItemResponseSchema,
   type ProjectDetailResponse,
+  type ProjectItemResponse,
 } from "../schemas/project.schemas.ts";
-import { mapProjectDetailToEntity } from "./project.mapper.ts";
+import { mapProjectDetailToEntity, mapProjectItemToEntity } from "./project.mapper.ts";
 import { ProjectAccessRole } from "../../domain/entities/project.entity.ts";
 
 describe("project-detail.mapper and schema validation", () => {
@@ -77,4 +79,24 @@ describe("project-detail.mapper and schema validation", () => {
       projectDetailResponseSchema.parse(missingRole);
     });
   });
+
+  it("valida y mapea correctamente un ProjectItem con modified_date", () => {
+    const rawItem: ProjectItemResponse = {
+      id: "c3d3e3f3-1234-5678-90ab-cdef12345678",
+      name: "Catálogo Online",
+      description: "Servicios web",
+      thumbnail_url: null,
+      is_owner: true,
+      modified_date: "2026-11-10T12:30:00Z",
+    };
+
+    const parsed = projectItemResponseSchema.parse(rawItem);
+    const entity = mapProjectItemToEntity(parsed);
+
+    assert.equal(entity.id, "c3d3e3f3-1234-5678-90ab-cdef12345678");
+    assert.equal(entity.name, "Catálogo Online");
+    assert.equal(entity.isOwner, true);
+    assert.equal(entity.modifiedDate, "2026-11-10T12:30:00Z");
+  });
 });
+

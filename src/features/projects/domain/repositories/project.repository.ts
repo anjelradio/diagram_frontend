@@ -7,6 +7,7 @@ import type {
   ProjectCreated,
   ProjectDetail,
   ProjectList,
+  ProjectThumbnailUpdated,
   ProjectUpdate,
 } from "../entities/project.entity";
 
@@ -21,5 +22,9 @@ export interface ProjectRepository {
   exportProject(projectId: string): Promise<ApiFileResult>;
   updateProject(projectId: string, update: ProjectUpdate): Promise<ApiActionResult>;
   deleteProject(projectId: string): Promise<ApiActionResult>;
+  uploadThumbnail(
+    projectId: string,
+    imageBlob: Blob
+  ): Promise<ApiResult<ProjectThumbnailUpdated>>;
 }
 

@@ -4,9 +4,7 @@ import Link from "next/link";
 import {
   ArrowLeft,
   ArrowUpRight,
-  Copy,
   Menu,
-  Terminal,
   Trash2,
 } from "lucide-react";
 import {
@@ -24,27 +22,28 @@ import { appToast } from "@/features/shared/presentation/components/notification
 type ProjectActionsMenuProps = {
   isOwner?: boolean;
   capabilities?: ProjectCanvasCapabilities;
-  onOpenCommands: () => void;
   onOpenDelete?: () => void;
   onExport?: () => void;
+  onBackToProjects?: () => void;
 };
 
 /**
  * Menú desplegable principal de opciones del proyecto (Trigger hamburguesa).
- * Proporciona navegación de retorno al listado de proyectos, apertura de comandos (⌘K),
- * accesos a funcionalidades futuras y eliminación protegida para propietarios.
+ * Proporciona navegación de retorno al listado de proyectos, exportación
+ * y eliminación protegida para propietarios.
  */
 export function ProjectActionsMenu({
   isOwner = false,
   capabilities,
-  onOpenCommands,
   onOpenDelete,
   onExport,
+  onBackToProjects,
 }: ProjectActionsMenuProps) {
   const canExport = capabilities ? capabilities.canExportOrGenerate : true;
-  const canDuplicateOrDelete = capabilities
+  const canDelete = capabilities
     ? capabilities.canDuplicateOrDeleteProject
     : isOwner;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -70,94 +69,76 @@ export function ProjectActionsMenu({
         </div>
 
         {/* Volver a proyectos */}
-        <DropdownMenuItem asChild className="hover:bg-white/5 focus:bg-white/5 data-[highlighted]:bg-white/5 transition cursor-pointer text-slate-200 hover:text-white focus:text-white data-[highlighted]:text-white outline-none">
-          <Link
-            href="/projects"
-            className="flex items-center justify-between py-2 px-2.5 rounded-xl group"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:border-white/30 group-focus:border-white/30 group-data-[highlighted]:border-white/30 transition">
-                <ArrowLeft className="w-3.5 h-3.5 text-slate-300 group-hover:text-white group-focus:text-white group-data-[highlighted]:text-white transition" />
-              </div>
-              <span className="text-xs font-medium truncate">
-                Volver a todos los proyectos
-              </span>
-            </div>
-          </Link>
-        </DropdownMenuItem>
-
-        {/* Menú de comandos */}
         <DropdownMenuItem
-          onClick={onOpenCommands}
-          className="flex items-center justify-between py-2 px-2.5 rounded-xl hover:bg-white/5 focus:bg-white/5 data-[highlighted]:bg-white/5 transition cursor-pointer group text-slate-200 hover:text-white focus:text-white data-[highlighted]:text-white outline-none"
+          onSelect={(e) => {
+            if (onBackToProjects) {
+              e.preventDefault();
+              onBackToProjects();
+            }
+          }}
+          asChild={!onBackToProjects}
+          className="hover:bg-white/5 focus:bg-white/5 data-[highlighted]:bg-white/5 transition cursor-pointer text-slate-200 hover:text-white focus:text-white data-[highlighted]:text-white outline-none"
         >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:border-indigo-500/40 group-focus:border-indigo-500/40 group-data-[highlighted]:border-indigo-500/40 transition">
-              <Terminal className="w-3.5 h-3.5 text-indigo-400" />
+          {onBackToProjects ? (
+            <div className="flex items-center justify-between py-2 px-2.5 rounded-xl group w-full">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:border-white/30 group-focus:border-white/30 group-data-[highlighted]:border-white/30 transition">
+                  <ArrowLeft className="w-3.5 h-3.5 text-slate-300 group-hover:text-white group-focus:text-white group-data-[highlighted]:text-white transition" />
+                </div>
+                <span className="text-xs font-medium truncate">
+                  Volver a todos los proyectos
+                </span>
+              </div>
             </div>
-            <span className="text-xs font-medium truncate">
-              Menú de comandos
-            </span>
-          </div>
-          <span className="text-[10px] font-mono font-medium text-indigo-400 bg-indigo-500/15 border border-indigo-500/30 px-2 py-0.5 rounded-full flex-shrink-0">
-            ⌘K
-          </span>
+          ) : (
+            <Link
+              href="/projects"
+              className="flex items-center justify-between py-2 px-2.5 rounded-xl group"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:border-white/30 group-focus:border-white/30 group-data-[highlighted]:border-white/30 transition">
+                  <ArrowLeft className="w-3.5 h-3.5 text-slate-300 group-hover:text-white group-focus:text-white group-data-[highlighted]:text-white transition" />
+                </div>
+                <span className="text-xs font-medium truncate">
+                  Volver a todos los proyectos
+                </span>
+              </div>
+            </Link>
+          )}
         </DropdownMenuItem>
 
-        {(canExport || canDuplicateOrDelete) && (
-          <DropdownMenuSeparator className="bg-white/10 my-1" />
-        )}
-
-        {/* Exportar */}
         {canExport && (
-          <DropdownMenuItem
-            onClick={() => {
-              if (onExport) {
-                onExport();
-              } else {
-                appToast.info("La exportación de proyectos estará disponible próximamente.");
-              }
-            }}
-            className="flex items-center justify-between py-2 px-2.5 rounded-xl hover:bg-white/5 focus:bg-white/5 data-[highlighted]:bg-white/5 transition cursor-pointer group text-slate-200 hover:text-white focus:text-white data-[highlighted]:text-white outline-none"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:border-blue-500/40 group-focus:border-blue-500/40 group-data-[highlighted]:border-blue-500/40 transition">
-                <ArrowUpRight className="w-3.5 h-3.5 text-blue-400" />
-              </div>
-              <span className="text-xs font-medium truncate">
-                Exportar proyecto...
-              </span>
-            </div>
-            <span className="text-[10px] font-mono font-medium text-blue-400 bg-blue-500/15 border border-blue-500/30 px-2 py-0.5 rounded-full flex-shrink-0">
-              ⌘E
-            </span>
-          </DropdownMenuItem>
-        )}
+          <>
+            <DropdownMenuSeparator className="bg-white/10 my-1" />
 
-        {/* Duplicar (Próximamente) */}
-        {canDuplicateOrDelete && (
-          <DropdownMenuItem
-            onClick={() =>
-              appToast.info("La duplicación de proyectos estará disponible próximamente.")
-            }
-            className="flex items-center justify-between py-2 px-2.5 rounded-xl hover:bg-white/5 focus:bg-white/5 data-[highlighted]:bg-white/5 transition cursor-pointer group text-slate-200 hover:text-white focus:text-white data-[highlighted]:text-white outline-none"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:border-cyan-500/40 group-focus:border-cyan-500/40 group-data-[highlighted]:border-cyan-500/40 transition">
-                <Copy className="w-3.5 h-3.5 text-cyan-400" />
+            {/* Exportar */}
+            <DropdownMenuItem
+              onClick={() => {
+                if (onExport) {
+                  onExport();
+                } else {
+                  appToast.info("La exportación de proyectos estará disponible próximamente.");
+                }
+              }}
+              className="flex items-center justify-between py-2 px-2.5 rounded-xl hover:bg-white/5 focus:bg-white/5 data-[highlighted]:bg-white/5 transition cursor-pointer group text-slate-200 hover:text-white focus:text-white data-[highlighted]:text-white outline-none"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center flex-shrink-0 group-hover:border-blue-500/40 group-focus:border-blue-500/40 group-data-[highlighted]:border-blue-500/40 transition">
+                  <ArrowUpRight className="w-3.5 h-3.5 text-blue-400" />
+                </div>
+                <span className="text-xs font-medium truncate">
+                  Exportar proyecto...
+                </span>
               </div>
-              <span className="text-xs font-medium truncate">
-                Duplicar proyecto
+              <span className="text-[10px] font-mono font-medium text-blue-400 bg-blue-500/15 border border-blue-500/30 px-2 py-0.5 rounded-full flex-shrink-0">
+                ⌘E
               </span>
-            </div>
-            <span className="text-[10px] font-mono font-medium text-cyan-400 bg-cyan-400/15 border border-cyan-400/30 px-2 py-0.5 rounded-full flex-shrink-0">
-              ⌘D
-            </span>
-          </DropdownMenuItem>
+            </DropdownMenuItem>
+          </>
         )}
 
         {/* Acciones de Propietario / Administración */}
-        {canDuplicateOrDelete && onOpenDelete && (
+        {canDelete && onOpenDelete && (
           <>
             <DropdownMenuSeparator className="bg-white/10 my-1" />
 
