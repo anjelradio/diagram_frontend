@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTutorialStore } from "@/features/diagram/presentation/store/tutorial-slice";
 
 interface ManualFloatingHelpButtonProps {
   className?: string;
@@ -12,10 +13,17 @@ interface ManualFloatingHelpButtonProps {
 /**
  * Botón flotante accesible ("pelotita flotando") para la esquina inferior derecha.
  * Provee acceso rápido y persistente al manual de usuario y documentación pública.
+ * Se oculta automáticamente mientras el tutorial interactivo esté activo para evitar solapamientos.
  */
 export function ManualFloatingHelpButton({
   className,
 }: ManualFloatingHelpButtonProps) {
+  const isTutorialActive = useTutorialStore((state) => state.isActive);
+
+  if (isTutorialActive) {
+    return null;
+  }
+
   return (
     <div
       className={cn(

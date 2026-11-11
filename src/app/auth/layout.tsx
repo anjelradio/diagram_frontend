@@ -2,6 +2,7 @@ import { Suspense, type ReactNode } from "react";
 import { AuthHeader } from "@/features/auth/presentation/components/elements/auth-header";
 import { BackgroundGlow } from "@/features/auth/presentation/components/elements/background-glow";
 import { InteractiveDotPattern } from "@/features/shared/presentation/components/layout/interactive-dot-pattern";
+import { ManualFloatingHelpButton } from "@/features/manual/presentation/components/elements/manual-floating-help-button";
 
 /**
  * Layout de Next.js para todas las rutas bajo /auth/*.
@@ -38,6 +39,9 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
       </main>
+
+      {/* Acceso persistente al manual y documentación pública */}
+      <ManualFloatingHelpButton />
     </div>
   );
 }

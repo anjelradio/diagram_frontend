@@ -55,12 +55,13 @@ export function ProjectCanvasToolbar({
   return (
     <div className="fixed right-5 top-1/2 -translate-y-1/2 z-30 flex items-center gap-3 pointer-events-auto">
       {/* Barra vertical de herramientas (Pill) */}
-      <aside aria-label="Herramientas del lienzo">
+      <aside aria-label="Herramientas del lienzo" data-tutorial="canvas-toolbar">
         <div className="bg-[#191a1d] border border-white/10 shadow-xl rounded-full p-1.5 flex flex-col items-center gap-1.5 flex-shrink-0">
           {/* Nueva Clase UML (Atajo: V) */}
           {canEdit && (
             <button
               type="button"
+              data-tutorial="tool-create-class"
               onClick={() => onSelectTool("create-class")}
               className={getButtonClass(isCreateClassActive)}
               title="Nueva Clase UML (V)"
@@ -75,6 +76,7 @@ export function ProjectCanvasToolbar({
           {canEdit && (
             <button
               type="button"
+              data-tutorial="tool-relation"
               data-relation-toolbar-button="true"
               onClick={() =>
                 onSelectTool(activeTool === "relation" ? "cursor" : "relation")

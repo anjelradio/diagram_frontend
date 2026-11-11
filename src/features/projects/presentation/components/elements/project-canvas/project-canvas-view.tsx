@@ -45,6 +45,10 @@ import { AgentAuroraOverlay } from "@/features/assistant/presentation/components
 import { useAgentChat } from "@/features/assistant/presentation/hooks/use-agent-chat";
 import { useInBrowserStt } from "@/features/assistant/presentation/hooks/use-in-browser-stt";
 import { appToast } from "@/features/shared/presentation/components/notifications/toast";
+import { useDiagramTutorial } from "@/features/diagram/presentation/hooks/use-diagram-tutorial";
+import { TutorialSpotlightOverlay } from "@/features/diagram/presentation/components/elements/tutorial/tutorial-spotlight-overlay";
+import { TutorialPetBubble } from "@/features/diagram/presentation/components/elements/tutorial/tutorial-pet-bubble";
+import { TutorialExitButton } from "@/features/diagram/presentation/components/elements/tutorial/tutorial-exit-button";
 
 type ProjectCanvasViewProps = {
   project: ProjectDetail;
@@ -287,6 +291,8 @@ export function ProjectCanvasView({
     };
   }, [activeTool, canEdit, capabilities.canExportOrGenerate, exportProject, handleSelectTool]);
 
+  const tutorial = useDiagramTutorial();
+
   return (
     <ReactFlowProvider>
       <div className="relative w-screen h-screen overflow-hidden select-none bg-[#212224]">
@@ -522,6 +528,27 @@ export function ProjectCanvasView({
           projectId={currentProject.id}
           projectName={currentProject.name}
         />
+      )}
+
+      {/* Componentes del Tutorial Interactivo en el Lienzo */}
+      {tutorial.isActive && (
+        <>
+          <TutorialSpotlightOverlay
+            active={Boolean(tutorial.spotlight)}
+            targetSelector={tutorial.spotlight?.targetSelector}
+            shape={tutorial.spotlight?.shape}
+            padding={tutorial.spotlight?.padding}
+          />
+          <TutorialPetBubble
+            visible={true}
+            state={tutorial.petState}
+            placement={tutorial.petPlacement}
+            targetSelector={tutorial.targetSelector}
+            message={tutorial.message}
+            actionButton={tutorial.actionButton}
+          />
+          <TutorialExitButton onExit={tutorial.onExit} />
+        </>
       )}
       </div>
     </ReactFlowProvider>

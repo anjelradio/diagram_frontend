@@ -89,6 +89,7 @@ export function AgentChatWidget({
           className
         )}
         onClick={!chat.isOpen && canInteract ? () => chat.setIsOpen(true) : undefined}
+        data-tutorial="agent-trigger-btn"
         role={!chat.isOpen ? "button" : undefined}
         tabIndex={!chat.isOpen ? 0 : undefined}
         aria-label={!chat.isOpen ? "Abrir chat del Asistente IA" : undefined}

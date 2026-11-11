@@ -95,6 +95,7 @@ export function IntegrationsPopoverButton({
         <PopoverTrigger asChild>
           <button
             type="button"
+            data-tutorial="integrations-btn"
             aria-label="Abrir integraciones"
             title="Integraciones"
             className="group relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-[#16171b]/95 text-slate-300 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-xl transition-all duration-200 hover:-translate-y-0.5 hover:border-white/20 hover:bg-[#1d1f25] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 active:translate-y-0 active:scale-95"

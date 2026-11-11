@@ -13,6 +13,13 @@ import { projectRepositoryImpl } from "../../../../infrastructure/repositories/p
 import { CreateProjectButton } from "../../forms/projects-list/create-project-button";
 import { ProjectCard } from "./project-card";
 import { ProjectFilterTabs } from "./project-filter-tabs";
+import { TutorialWelcomeModal } from "@/features/diagram/presentation/components/elements/tutorial/tutorial-welcome-modal";
+import { TutorialSpotlightOverlay } from "@/features/diagram/presentation/components/elements/tutorial/tutorial-spotlight-overlay";
+import { TutorialPetBubble } from "@/features/diagram/presentation/components/elements/tutorial/tutorial-pet-bubble";
+import { TutorialExitButton } from "@/features/diagram/presentation/components/elements/tutorial/tutorial-exit-button";
+import { RestartTutorialButton } from "@/features/diagram/presentation/components/elements/tutorial/restart-tutorial-button";
+import { useTutorialStore } from "@/features/diagram/presentation/store/tutorial-slice";
+import { getTutorialCookieStatus } from "@/features/diagram/infrastructure/utils/tutorial-cookie";
 
 type ProjectsViewProps = {
   projects: ProjectListItem[];
@@ -30,6 +37,27 @@ export function ProjectsView({ projects, errorMessage }: ProjectsViewProps) {
   const [activeTab, setActiveTab] = useState<ProjectTab>("owned");
   const [searchTerm, setSearchTerm] = useState("");
   const [isImporting, setIsImporting] = useState(false);
+
+  // Estado del tutorial
+  const {
+    isActive: isTutorialActive,
+    currentScene,
+    startTutorial,
+    skipTutorial,
+    restartTutorial,
+    setScene,
+  } = useTutorialStore();
+
+  useEffect(() => {
+    // Si no se ha completado u omitido el tutorial, ofrecerlo automáticamente
+    const status = getTutorialCookieStatus();
+    if (status === "pending") {
+      setScene("MODAL_WELCOME");
+    } else if (status === "in_progress") {
+      // Si el usuario estaba en progreso pero volvió a /projects, reanudar en la escena 1
+      setScene("SCENE_1_NEW_PROJECT");
+    }
+  }, [setScene]);
 
   useEffect(() => {
     // Revalidar el listado de proyectos al montar para reflejar miniaturas recién actualizadas
@@ -213,6 +241,34 @@ export function ProjectsView({ projects, errorMessage }: ProjectsViewProps) {
           )}
         </section>
       )}
+      {/* Elementos del Tutorial en /projects */}
+      <TutorialWelcomeModal
+        open={currentScene === "MODAL_WELCOME"}
+        onStartTutorial={() => startTutorial()}
+        onSkipTutorial={() => skipTutorial()}
+      />
+
+      {isTutorialActive && currentScene === "SCENE_1_NEW_PROJECT" && (
+        <>
+          <TutorialSpotlightOverlay
+            active={true}
+            targetSelector="[data-tutorial='create-project-btn']"
+            shape="pill"
+            padding={6}
+          />
+          <TutorialPetBubble
+            visible={true}
+            state="happy"
+            placement="left-of-target"
+            targetSelector="[data-tutorial='create-project-btn']"
+            message="¡Creemos nuestro primer proyecto para comenzar a diseñar!"
+          />
+          <TutorialExitButton onExit={() => skipTutorial()} />
+        </>
+      )}
+
+      {/* Botón flotante para relanzar el tutorial */}
+      <RestartTutorialButton onRestart={() => restartTutorial()} />
     </main>
   );
 }

@@ -43,6 +43,7 @@ export function CreateProjectButton() {
   return (
     <button
       type="button"
+      data-tutorial="create-project-btn"
       onClick={handleCreate}
       disabled={isPending}
       className="group relative inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-all duration-200 shadow-lg shadow-indigo-600/25 hover:shadow-indigo-600/40 active:scale-[0.98] border border-indigo-400/30 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none select-none"
