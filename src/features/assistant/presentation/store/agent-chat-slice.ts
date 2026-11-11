@@ -439,7 +439,11 @@ export const createAgentChatSlice: StateCreator<AgentChatSlice> = (set) => ({
   applyAssistantMessageFinished: (projectId, message, currentUserId) =>
     set((state) => {
       const session = resolveSession(state.assistantSessions, projectId);
-      let next = { ...session, messages: upsertServerMessage(session.messages, message, true) };
+      let next = {
+        ...session,
+        isOpen: true,
+        messages: upsertServerMessage(session.messages, message, true),
+      };
       if (message.userId === currentUserId && session.active?.id === message.id) next = promoteNext(next);
       releaseUnusedUrls(session, next);
       return { assistantSessions: { ...state.assistantSessions, [projectId]: next } };

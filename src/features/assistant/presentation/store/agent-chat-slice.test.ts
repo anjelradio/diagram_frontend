@@ -361,3 +361,11 @@ test("mantiene conversaciones separadas por proyecto", () => {
   assert.equal(store.getState().assistantSessions["project-a"].active?.text, "A");
   assert.equal(store.getState().assistantSessions["project-b"].draft.text, "B");
 });
+
+test("applyAssistantMessageFinished abre automáticamente el chat del proyecto si estaba cerrado", () => {
+  const store = createTestStore();
+  // Inicialmente el chat está cerrado
+  assert.equal(store.getState().assistantSessions[projectId]?.isOpen ?? false, false);
+  store.getState().applyAssistantMessageFinished(projectId, terminalMessage("msg-1"), "user-1");
+  assert.equal(store.getState().assistantSessions[projectId].isOpen, true);
+});
